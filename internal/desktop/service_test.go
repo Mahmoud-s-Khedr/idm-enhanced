@@ -30,3 +30,11 @@ func TestService(t *testing.T) {
 		t.Fatal("last ping not published")
 	}
 }
+
+func TestDisconnectedBridge(t *testing.T) {
+	s := New("ready")
+	s.Disconnect()
+	if s.Info().IPC != "Browser bridge disconnected. Restart the application." {
+		t.Fatal("bridge failure not presented")
+	}
+}

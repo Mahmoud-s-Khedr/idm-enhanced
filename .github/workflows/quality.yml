@@ -55,8 +55,7 @@ jobs:
       - run: go run ./tools/quality task build
       - run: go test -count=1 ./...
       - run: go run ./tools/quality task integration
-      - shell: bash
-        run: go env GOOS GOARCH GOVERSION
+      - run: go run ./tools/quality task platform-info
   required:
     name: Required checks
     if: always()

@@ -151,7 +151,7 @@ Require a reason for a budget increase and a visible policy/configuration diff. 
 - [x] Supply canonical check tasks and a clear list of gates not yet applicable.
 - [x] Configure staged hooks without damaging partially staged work.
 - [x] Configure Go checks immediately; activate TS checks when the shell/extension spike adds TS.
-- [ ] Complete passing native CI evidence. The workflow uses the canonical tasks and hosting protection is already configured; hosted validation is still in progress.
+- [x] Complete passing native CI evidence. The workflow uses canonical tasks and hosting protection is configured; actual runner architectures and successful run links are recorded in M0_EVIDENCE.md.
 - [x] Demonstrate failures with temporary controlled samples: formatting, lint/type errors, forbidden import, copied block, unused dependency, and dummy-secret fixture.
 - [x] When test suites and bundle outputs exist, prove coverage and budget checks reject an intentional regression. Remove temporary probes after validation.
 - [x] Configure clone exclusions and architecture entry points narrowly.

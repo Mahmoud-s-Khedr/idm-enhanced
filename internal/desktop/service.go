@@ -38,3 +38,12 @@ func (s *Service) Accept(m protocol.Message) (protocol.Message, error) {
 	s.mu.Unlock()
 	return reply, nil
 }
+
+// Disconnect presents bridge failure without exposing transport details.
+//
+//wails:ignore
+func (s *Service) Disconnect() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ipc = "Browser bridge disconnected. Restart the application."
+}

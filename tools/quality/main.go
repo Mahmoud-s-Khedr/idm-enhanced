@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -214,6 +215,32 @@ func task(n string) error {
 		return staged()
 	case "browser-smoke":
 		return command("node", "tools/browser-smoke.mjs")
+	case "platform-info":
+		fmt.Printf("Native runner: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		if err := command("go", "env", "GOOS", "GOARCH", "GOVERSION"); err != nil {
+			return err
+		}
+		if err := command("node", "--version"); err != nil {
+			return err
+		}
+		if err := pnpm("--version"); err != nil {
+			return err
+		}
+		if err := command("go", "list", "-m", "github.com/wailsapp/wails/v3"); err != nil {
+			return err
+		}
+		switch runtime.GOOS {
+		case "linux":
+			return command("pkg-config", "--modversion", "gtk4", "webkitgtk-6.0")
+		case "darwin":
+			if err := command("sw_vers"); err != nil {
+				return err
+			}
+			return command("xcrun", "--show-sdk-version")
+		case "windows":
+			return command("cmd", "/c", "ver")
+		}
+		return fmt.Errorf("unsupported native platform %s", runtime.GOOS)
 	case "register":
 		return registration(false)
 	case "unregister":
@@ -235,7 +262,15 @@ func checkVersions() error {
 		if e != nil {
 			return e
 		}
-		if !strings.Contains(string(b), c.want) {
+		got := strings.TrimSpace(string(b))
+		if c.name == "go" {
+			f := strings.Fields(got)
+			if len(f) < 3 {
+				return errors.New("unrecognized Go version output")
+			}
+			got = strings.SplitN(f[2], "-", 2)[0]
+		}
+		if got != c.want {
 			return fmt.Errorf("%s: expected %s, got %s", c.name, c.want, b)
 		}
 	}
@@ -251,11 +286,40 @@ func checkVersions() error {
 		if e != nil {
 			return e
 		}
-		if !strings.Contains(string(b), strings.TrimPrefix(p.Version, "v")) {
+		if !hasVersion(string(b), p.Version) {
 			return fmt.Errorf("%s expected %s, got %s", n, p.Version, b)
 		}
 	}
+	b, e := output("go", "list", "-m", "-f", "{{.Version}}", "github.com/wailsapp/wails/v3")
+	if e != nil {
+		return e
+	}
+	if strings.TrimSpace(string(b)) != pins.Tools["wails3"].Version {
+		return errors.New("wails library and CLI pins must match")
+	}
+	b, e = os.ReadFile("frontend/package.json")
+	if e != nil {
+		return e
+	}
+	var frontend struct{ Dependencies map[string]string }
+	if e = json.Unmarshal(b, &frontend); e != nil {
+		return e
+	}
+	if frontend.Dependencies["@wailsio/runtime"] != strings.TrimPrefix(pins.Tools["wails3"].Version, "v") {
+		return errors.New("wails runtime and CLI pins must match")
+	}
 	return nil
+}
+
+var semver = regexp.MustCompile(`v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`)
+
+func hasVersion(output, want string) bool {
+	for _, v := range semver.FindAllString(output, -1) {
+		if strings.TrimPrefix(v, "v") == strings.TrimPrefix(want, "v") {
+			return true
+		}
+	}
+	return false
 }
 func doctor() error {
 	fmt.Printf("Platform: %s/%s\nPins: Go %s, Node %s, pnpm %s\n", runtime.GOOS, runtime.GOARCH, pins.Go, pins.Node, pins.PNPM)
@@ -276,7 +340,7 @@ func doctor() error {
 	return errors.Join(versionErr, nativeErr)
 }
 func bootstrap() error {
-	if !strings.Contains(runtime.Version(), "go"+pins.Go) {
+	if strings.SplitN(runtime.Version(), "-", 2)[0] != "go"+pins.Go {
 		return fmt.Errorf("install Go %s first", pins.Go)
 	}
 	if err := os.MkdirAll(filepath.Join(root, ".tools", "bin"), 0755); err != nil {
