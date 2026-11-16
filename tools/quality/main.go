@@ -43,7 +43,7 @@ func main() {
 	node := filepath.Join(root, ".tools", "node-v"+pins.Node+"-"+runtime.GOOS+"-"+nodeArch(), "bin")
 	must(os.Setenv("PATH", strings.Join([]string{node, filepath.Join(root, ".tools", "pnpm", "node_modules", ".bin"), local, os.Getenv("PATH")}, string(os.PathListSeparator))))
 	args := os.Args[1:]
-	if len(args) > 0 && args[0] != "bootstrap" {
+	if len(args) > 0 && args[0] != "bootstrap" && args[0] != "bootstrap-deps" {
 		must(os.Setenv("GOPROXY", "off"))
 		must(os.Setenv("GOTOOLCHAIN", "local"))
 	}
@@ -56,6 +56,8 @@ func main() {
 		err = doctor()
 	case "bootstrap":
 		err = bootstrap()
+	case "bootstrap-deps":
+		err = bootstrapDeps()
 	case "check", "check:full":
 		names := []string{"versions", "build", "format", "lint-go", "lint-ts", "types", "deadcode", "architecture", "clones", "test-clones", "mod-drift", "test-go", "test-tools", "test-ts", "bindings", "budgets"}
 		if args[0] == "check:full" {
@@ -295,10 +297,7 @@ func bootstrap() error {
 			return err
 		}
 	}
-	if err := command("go", "mod", "download"); err != nil {
-		return err
-	}
-	if err := pnpm("install", "--frozen-lockfile"); err != nil {
+	if err := bootstrapDeps(); err != nil {
 		return err
 	}
 	return pnpm("exec", "lefthook", "install")
@@ -520,4 +519,12 @@ func cleanup(path string) {
 	if e := os.RemoveAll(path); e != nil {
 		fmt.Fprintln(os.Stderr, "Temporary cleanup failed:", e)
 	}
+}
+
+// bootstrapDeps is the explicit network setup used by native-build jobs.
+func bootstrapDeps() error {
+	if err := command("go", "mod", "download"); err != nil {
+		return err
+	}
+	return pnpm("install", "--frozen-lockfile")
 }

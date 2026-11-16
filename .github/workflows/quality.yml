@@ -51,7 +51,7 @@ jobs:
           run_install: false
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-      - run: pnpm install --frozen-lockfile
+      - run: go run ./tools/quality bootstrap-deps
       - run: go run ./tools/quality task build
       - run: go test -count=1 ./...
       - run: go run ./tools/quality task integration

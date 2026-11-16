@@ -63,12 +63,19 @@ separate reviewed budgets when introduced.
 - `go run ./tools/quality gate-probes`: passed all 16 controlled rejection checks in a disposable copy; results in build/gate-probes.txt.
 - `go run ./tools/quality task integration`: passed, including the actual five-second stdin deadline.
 - `go run ./tools/quality task vuln`: passed, no known/reachable Go or high/critical JS vulnerabilities reported at execution time.
-- Coverage: desktop state 100%, IPC 86.4%, protocol 98.3% statements. TS behavior suite passed its per-file thresholds.
+- Coverage: desktop state 100%, IPC 87.4%, protocol 98.3% statements. TS behavior suite passed its per-file thresholds.
 
 ## Hosted and deferred results
 
-Public repository creation, required hosting rule readback and native CI run links
-will be recorded after publication. Windows/macOS interactive launch remains
+Public repository: https://github.com/Mahmoud-s-Khedr/idm-enhanced . Main protection
+was configured and read back: PRs required, Required checks required with strict
+up-to-date branches, admins included, zero mandatory approving reviewers, force
+pushes/deletion blocked. Native CI run links will be recorded after successful runs.
+The first hosted run exposed a missing module-cache bootstrap in native matrix
+jobs; the follow-up adds explicit dependency bootstrap before offline builds.
+Repeated local builds remove stale extension assets and produce byte-identical
+asset fingerprints. Current extension output is 2537 raw / 1209 gzip bytes, within
+the unchanged initial budgets. The first calibration (2502 / 1208) remains recorded above. Windows/macOS interactive launch remains
 outstanding even after native builds pass. Windows/macOS live browser IPC belongs
 to M5. No signing, installer, power-loss, engine, download, media or additional
 architecture compatibility is claimed.
