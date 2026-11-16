@@ -60,7 +60,7 @@ separate reviewed budgets when introduced.
 - `go run ./tools/quality doctor`: passed, exact tools and native dependencies diagnosed.
 - `go run ./tools/quality check`: passed locally; the full superset and hosted quality task also passed.
 - `go run ./tools/quality check:full`: passed locally, including build, coverage, race, subprocess integration and both vulnerability scanners.
-- `go run ./tools/quality gate-probes`: passed all 17 controlled rejection checks in a disposable copy; results in build/gate-probes.txt.
+- `go run ./tools/quality gate-probes`: passed all 18 controlled rejection checks in a disposable copy; results in build/gate-probes.txt.
 - `go run ./tools/quality task integration`: passed, including the actual five-second stdin deadline.
 - `go run ./tools/quality task vuln`: passed, no known/reachable Go or high/critical JS vulnerabilities reported at execution time.
 - Coverage: desktop state 100%, IPC 87.4%, protocol 98.3% statements. TS behavior suite passed its per-file thresholds.
@@ -83,6 +83,11 @@ checks. Subsequent PR heads must independently pass before merge.
 Node 26.13.1, pnpm 12.21.0 and Wails library/runtime 3.0.0 are pinned for every
 native job. `task platform-info` records native framework/SDK versions on each
 current run as well as the actual target architecture.
+
+The [runner-metadata run](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/43977592606)
+recorded GTK4 4.14.5 / WebKitGTK 2.52.6 on Linux; macOS 15.8.2 (24H232) with SDK
+15.5; and Windows 10.0.26100.33674. Every runner reported Node 26.13.1, pnpm
+12.21.0 and Wails v3.0.0.
 The first hosted run exposed a missing module-cache bootstrap in native matrix
 jobs and missing dependency-test modules for offline tidy. Explicit bootstrap now
 prefetches the pinned module graph using a temporary manifest before offline builds.

@@ -105,6 +105,26 @@ func output(name string, args ...string) ([]byte, error) {
 	c.Stderr = os.Stderr
 	return c.Output()
 }
+
+// goTest rejects accidentally empty required suites before running them.
+func goTest(args ...string) error {
+	listArgs := append([]string{"test", "-vet=off", "-list", "^(Test|Example|Fuzz)"}, args...)
+	b, err := output("go", listArgs...)
+	if err != nil {
+		return err
+	}
+	count := 0
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, "Test") || strings.HasPrefix(line, "Example") || strings.HasPrefix(line, "Fuzz") {
+			count++
+		}
+	}
+	if count == 0 {
+		return errors.New("required Go test suite is empty")
+	}
+	fmt.Printf("Required Go tests discovered: %d\n", count)
+	return command("go", append([]string{"test", "-vet=off"}, args...)...)
+}
 func sequence(names []string) error {
 	for _, n := range names {
 		fmt.Println("TASK", n)
@@ -167,21 +187,21 @@ func task(n string) error {
 	case "mod-drift":
 		return modDrift()
 	case "test-go":
-		if err := command("go", "test", "-count=1", "-coverprofile=coverage.go.prof", "./internal/..."); err != nil {
+		if err := goTest("-count=1", "-coverprofile=coverage.go.prof", "./internal/..."); err != nil {
 			return err
 		}
 		return coverage()
 	case "test-tools":
-		return command("go", "test", "-count=1", "./tools/...")
+		return goTest("-count=1", "./tools/...")
 	case "test-ts":
 		return pnpm("exec", "vitest", "run", "--coverage")
 	case "race":
 		if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 			return fmt.Errorf("race detector unsupported on %s/%s; require a supported CI runner", runtime.GOOS, runtime.GOARCH)
 		}
-		return command("go", "test", "-race", "-count=1", "./internal/...", "./tools/...")
+		return goTest("-race", "-count=1", "./internal/...", "./tools/...")
 	case "integration":
-		return command("go", "test", "-count=1", "-tags=integration", "./integration/...")
+		return goTest("-count=1", "-tags=integration", "./integration/...")
 	case "bindings":
 		if err := command("go", "run", "./tools/contract", "-check"); err != nil {
 			return err

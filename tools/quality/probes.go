@@ -67,7 +67,7 @@ func probes() error {
 		return c.CombinedOutput()
 	}
 	// A failing clean baseline must never count as proof of a working gate.
-	gates := []string{"build", "format", "lint-go", "lint-ts", "types", "architecture", "clones", "deadcode", "mod-drift", "test-go", "test-ts", "bindings", "budgets", "secrets"}
+	gates := []string{"build", "format", "lint-go", "lint-ts", "types", "architecture", "clones", "deadcode", "mod-drift", "test-go", "test-tools", "test-ts", "bindings", "budgets", "secrets"}
 	for _, g := range gates {
 		b, e := run("task", g)
 		if e != nil {
@@ -86,6 +86,7 @@ func probes() error {
 		{"ts-boundary", "architecture", "extensions/shared/src/connection.ts", "\nimport '../../../frontend/src/App';\n"},
 		{"ts-clone", "clones", "extensions/shared/src/clone-probe.ts", "export function first(input: number) { const values: number[] = [];\n" + sample + "return values; }\nexport function second(input: number) { const values: number[] = [];\n" + sample + "return values; }\n"},
 		{"unused-dependency", "deadcode", "package.json", ""},
+		{"empty-suite", "test-tools", "tools/quality/main_test.go", ""},
 		{"manifest-drift", "mod-drift", "go.mod", "\nrequire example.com/unused v1.0.0\n"},
 		{"secret", "secrets", "secret-probe.txt", ""},
 		{"go-coverage", "test-go", "internal/protocol/protocol.go", "\nfunc UncoveredProbe(x int) int {\n" + uncovered() + "return x\n}\n"},
@@ -127,7 +128,7 @@ func probes() error {
 	fmt.Fprintln(&report, "PASS repeated builds remove stale assets and preserve byte-identical output")
 
 	var details strings.Builder
-	expected := map[string]string{"format": "gofmt required", "lint": "no-unused-vars", "types": "TS2322", "ts-boundary": "extension-no-frontend", "ts-clone": "clones", "unused-dependency": "unused-probe", "manifest-drift": "example.com/unused", "secret": "leaks found", "go-coverage": "below 80%", "ts-coverage": "Coverage", "bundle": "bundle budget exceeded", "bindings": "binding drift"}
+	expected := map[string]string{"format": "gofmt required", "lint": "no-unused-vars", "types": "TS2322", "ts-boundary": "extension-no-frontend", "ts-clone": "clones", "unused-dependency": "unused-probe", "empty-suite": "required Go test suite is empty", "manifest-drift": "example.com/unused", "secret": "leaks found", "go-coverage": "below 80%", "ts-coverage": "Coverage", "bundle": "bundle budget exceeded", "bindings": "binding drift"}
 
 	for _, p := range probes {
 		path := filepath.Join(dir, p.path)
@@ -135,6 +136,9 @@ func probes() error {
 		data := append(append([]byte(nil), old...), []byte(p.append)...)
 		if p.name == "unused-dependency" {
 			data = bytes.Replace(old, []byte(`"devDependencies": {`), []byte(`"devDependencies": {"unused-probe": "1.0.0",`), 1)
+		}
+		if p.name == "empty-suite" {
+			data = []byte("package main\n")
 		}
 		if p.name == "secret" {
 			data = []byte("synthetic_test_token = " + "ghp_" + "q8R3yN7mV2xP9kL5sT4wB6cF1dH0jZ8uA3eC\n")
