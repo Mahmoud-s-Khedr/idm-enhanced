@@ -17,7 +17,7 @@ fail. `doctor` diagnoses installations; it is not proof that platform tests pass
 | active             | aggregate rejects failed/cancelled/skipped/missing jobs                                                         | M0 CI                                                         |
 | active             | gate-probes in a disposable copy, with a clean baseline for each gate                                           | M0 CI                                                         |
 | active             | browser-smoke: real extension/native-host/IPC round trips using disposable Linux browser profiles               | M0 acceptance, requires running native app and local browsers |
-| blocked            | Windows/macOS native CI evidence until hosted runs complete                                                     | M0 acceptance                                                 |
+| active             | Windows/macOS native CI build and framing tests (passed; see M0 evidence)                                       | M0 acceptance                                                 |
 | not applicable yet | engine 90% critical coverage, HTTP/range/recovery fixtures                                                      | M1–M3 as logic arrives                                        |
 | not applicable yet | live Windows/macOS browser IPC and registration                                                                 | M5                                                            |
 | not applicable yet | installers, signing, media, SQLite migration checks                                                             | corresponding release milestones                              |
