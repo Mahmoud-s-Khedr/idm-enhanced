@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -43,7 +44,7 @@ func main() {
 	node := filepath.Join(root, ".tools", "node-v"+pins.Node+"-"+runtime.GOOS+"-"+nodeArch(), "bin")
 	must(os.Setenv("PATH", strings.Join([]string{node, filepath.Join(root, ".tools", "pnpm", "node_modules", ".bin"), local, os.Getenv("PATH")}, string(os.PathListSeparator))))
 	args := os.Args[1:]
-	if len(args) > 0 && args[0] != "bootstrap" {
+	if len(args) > 0 && args[0] != "bootstrap" && args[0] != "bootstrap-deps" {
 		must(os.Setenv("GOPROXY", "off"))
 		must(os.Setenv("GOTOOLCHAIN", "local"))
 	}
@@ -56,6 +57,8 @@ func main() {
 		err = doctor()
 	case "bootstrap":
 		err = bootstrap()
+	case "bootstrap-deps":
+		err = bootstrapDeps()
 	case "check", "check:full":
 		names := []string{"versions", "build", "format", "lint-go", "lint-ts", "types", "deadcode", "architecture", "clones", "test-clones", "mod-drift", "test-go", "test-tools", "test-ts", "bindings", "budgets"}
 		if args[0] == "check:full" {
@@ -101,6 +104,26 @@ func output(name string, args ...string) ([]byte, error) {
 	c := exec.Command(name, args...)
 	c.Stderr = os.Stderr
 	return c.Output()
+}
+
+// goTest rejects accidentally empty required suites before running them.
+func goTest(args ...string) error {
+	listArgs := append([]string{"test", "-vet=off", "-list", "^(Test|Example|Fuzz)"}, args...)
+	b, err := output("go", listArgs...)
+	if err != nil {
+		return err
+	}
+	count := 0
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, "Test") || strings.HasPrefix(line, "Example") || strings.HasPrefix(line, "Fuzz") {
+			count++
+		}
+	}
+	if count == 0 {
+		return errors.New("required Go test suite is empty")
+	}
+	fmt.Printf("Required Go tests discovered: %d\n", count)
+	return command("go", append([]string{"test", "-vet=off"}, args...)...)
 }
 func sequence(names []string) error {
 	for _, n := range names {
@@ -164,21 +187,21 @@ func task(n string) error {
 	case "mod-drift":
 		return modDrift()
 	case "test-go":
-		if err := command("go", "test", "-count=1", "-coverprofile=coverage.go.prof", "./internal/..."); err != nil {
+		if err := goTest("-count=1", "-coverprofile=coverage.go.prof", "./internal/..."); err != nil {
 			return err
 		}
 		return coverage()
 	case "test-tools":
-		return command("go", "test", "-count=1", "./tools/...")
+		return goTest("-count=1", "./tools/...")
 	case "test-ts":
 		return pnpm("exec", "vitest", "run", "--coverage")
 	case "race":
 		if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 			return fmt.Errorf("race detector unsupported on %s/%s; require a supported CI runner", runtime.GOOS, runtime.GOARCH)
 		}
-		return command("go", "test", "-race", "-count=1", "./internal/...", "./tools/...")
+		return goTest("-race", "-count=1", "./internal/...", "./tools/...")
 	case "integration":
-		return command("go", "test", "-count=1", "-tags=integration", "./integration/...")
+		return goTest("-count=1", "-tags=integration", "./integration/...")
 	case "bindings":
 		if err := command("go", "run", "./tools/contract", "-check"); err != nil {
 			return err
@@ -212,6 +235,32 @@ func task(n string) error {
 		return staged()
 	case "browser-smoke":
 		return command("node", "tools/browser-smoke.mjs")
+	case "platform-info":
+		fmt.Printf("Native runner: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		if err := command("go", "env", "GOOS", "GOARCH", "GOVERSION"); err != nil {
+			return err
+		}
+		if err := command("node", "--version"); err != nil {
+			return err
+		}
+		if err := pnpm("--version"); err != nil {
+			return err
+		}
+		if err := command("go", "list", "-m", "github.com/wailsapp/wails/v3"); err != nil {
+			return err
+		}
+		switch runtime.GOOS {
+		case "linux":
+			return command("pkg-config", "--modversion", "gtk4", "webkitgtk-6.0")
+		case "darwin":
+			if err := command("sw_vers"); err != nil {
+				return err
+			}
+			return command("xcrun", "--show-sdk-version")
+		case "windows":
+			return command("cmd", "/c", "ver")
+		}
+		return fmt.Errorf("unsupported native platform %s", runtime.GOOS)
 	case "register":
 		return registration(false)
 	case "unregister":
@@ -233,7 +282,15 @@ func checkVersions() error {
 		if e != nil {
 			return e
 		}
-		if !strings.Contains(string(b), c.want) {
+		got := strings.TrimSpace(string(b))
+		if c.name == "go" {
+			f := strings.Fields(got)
+			if len(f) < 3 {
+				return errors.New("unrecognized Go version output")
+			}
+			got = strings.SplitN(f[2], "-", 2)[0]
+		}
+		if got != c.want {
 			return fmt.Errorf("%s: expected %s, got %s", c.name, c.want, b)
 		}
 	}
@@ -249,11 +306,40 @@ func checkVersions() error {
 		if e != nil {
 			return e
 		}
-		if !strings.Contains(string(b), strings.TrimPrefix(p.Version, "v")) {
+		if !hasVersion(string(b), p.Version) {
 			return fmt.Errorf("%s expected %s, got %s", n, p.Version, b)
 		}
 	}
+	b, e := output("go", "list", "-m", "-f", "{{.Version}}", "github.com/wailsapp/wails/v3")
+	if e != nil {
+		return e
+	}
+	if strings.TrimSpace(string(b)) != pins.Tools["wails3"].Version {
+		return errors.New("wails library and CLI pins must match")
+	}
+	b, e = os.ReadFile("frontend/package.json")
+	if e != nil {
+		return e
+	}
+	var frontend struct{ Dependencies map[string]string }
+	if e = json.Unmarshal(b, &frontend); e != nil {
+		return e
+	}
+	if frontend.Dependencies["@wailsio/runtime"] != strings.TrimPrefix(pins.Tools["wails3"].Version, "v") {
+		return errors.New("wails runtime and CLI pins must match")
+	}
 	return nil
+}
+
+var semver = regexp.MustCompile(`v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`)
+
+func hasVersion(output, want string) bool {
+	for _, v := range semver.FindAllString(output, -1) {
+		if strings.TrimPrefix(v, "v") == strings.TrimPrefix(want, "v") {
+			return true
+		}
+	}
+	return false
 }
 func doctor() error {
 	fmt.Printf("Platform: %s/%s\nPins: Go %s, Node %s, pnpm %s\n", runtime.GOOS, runtime.GOARCH, pins.Go, pins.Node, pins.PNPM)
@@ -274,7 +360,7 @@ func doctor() error {
 	return errors.Join(versionErr, nativeErr)
 }
 func bootstrap() error {
-	if !strings.Contains(runtime.Version(), "go"+pins.Go) {
+	if strings.SplitN(runtime.Version(), "-", 2)[0] != "go"+pins.Go {
 		return fmt.Errorf("install Go %s first", pins.Go)
 	}
 	if err := os.MkdirAll(filepath.Join(root, ".tools", "bin"), 0755); err != nil {
@@ -295,10 +381,7 @@ func bootstrap() error {
 			return err
 		}
 	}
-	if err := command("go", "mod", "download"); err != nil {
-		return err
-	}
-	if err := pnpm("install", "--frozen-lockfile"); err != nil {
+	if err := bootstrapDeps(); err != nil {
 		return err
 	}
 	return pnpm("exec", "lefthook", "install")
@@ -373,6 +456,11 @@ func coverage() error {
 		return errors.New("required Go logic suite empty")
 	}
 	for _, p := range strings.Fields(string(pkgs)) {
+		if runtime.GOOS != "linux" && strings.HasSuffix(p, "/internal/ipc") {
+			fmt.Printf("SKIP %s coverage on %s: live application IPC is deferred to M5; shared framing remains required in protocol and native-host integration tests\n", p, runtime.GOOS)
+			continue
+		}
+
 		c := counts[p]
 		if c.total == 0 {
 			return fmt.Errorf("%s has no measured statements", p)
@@ -520,4 +608,28 @@ func cleanup(path string) {
 	if e := os.RemoveAll(path); e != nil {
 		fmt.Fprintln(os.Stderr, "Temporary cleanup failed:", e)
 	}
+}
+
+// bootstrapDeps is the explicit network setup used by native-build jobs.
+func bootstrapDeps() error {
+	// Prefetch the complete pinned module graph, including dependency tests used
+	// by tidy. A temporary modfile keeps download-only sums out of the source lock.
+	dir, err := os.MkdirTemp("", "idm-bootstrap-")
+	if err != nil {
+		return err
+	}
+	defer cleanup(dir)
+	for _, name := range []string{"go.mod", "go.sum"} {
+		b, e := os.ReadFile(name)
+		if e != nil {
+			return e
+		}
+		if e = os.WriteFile(filepath.Join(dir, name), b, 0600); e != nil {
+			return e
+		}
+	}
+	if err := command("go", "mod", "download", "-modfile="+filepath.Join(dir, "go.mod"), "all"); err != nil {
+		return err
+	}
+	return pnpm("install", "--frozen-lockfile")
 }

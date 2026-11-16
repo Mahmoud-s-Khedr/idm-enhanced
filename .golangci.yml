@@ -26,6 +26,10 @@ linters:
               desc: Engine must remain independent of desktop adapters
             - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop
               desc: Engine cannot depend on presentation
+            - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/frontend
+              desc: Engine cannot depend on frontend assets
+            - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/extensions
+              desc: Engine cannot depend on browser adapters
             - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/ipc
               desc: Engine cannot depend on browser transport
   exclusions:

@@ -50,7 +50,8 @@ requirements; the standard library cannot replace their language/framework
 analysis. TypeScript 6.0.3 is chosen because typescript-eslint 8.73.0 declares
 support below 6.1; TypeScript 7 is currently incompatible. The lockfile records
 transitive packages and integrity hashes. Go analyzers and scanners are installed
-locally at exact versions; golangci-lint alone runs govet/staticcheck.
+locally at exact versions; golangci-lint alone runs govet/staticcheck. Canonical
+Go test commands use `-vet=off` so the same vet analyzers are not run again.
 
 Runtime impact is measured by committed JS/CSS raw and gzip budgets in
 `tools/budgets.json`; no Node runtime ships in the desktop app. Extension output
@@ -61,7 +62,10 @@ not linked into the application). Revisit license inventory/SBOM before release.
 ## Coverage scope
 
 All present handwritten application logic under `internal/` is subject to 80%
-per-package statements. Frontend App and extension connection/popup behavior use
+per-package statements on its supported platforms. Application IPC is Linux-only
+in M0, so live-IPC coverage is explicitly not applicable on Windows/macOS until M5.
+Those targets still require shared protocol coverage and native-host framing/error
+process tests; a reported skip must not imply a working live IPC bridge. Frontend App and extension connection/popup behavior use
 80% statements/lines/functions and 75% branches per file. Generated bindings,
 generated protocol types, the root render call, asset embedding and minimal
 framework/native command registration are excluded. Tooling is validated through

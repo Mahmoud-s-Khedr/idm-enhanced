@@ -78,7 +78,7 @@ Torrents, FTP/FTPS, SFTP, HTTP/3, live recording, mobile apps, cloud sync, remot
 | Engine/runtime | Go                                                   | Pin a supported toolchain during setup                                            |
 | HTTP transport | Standard `net/http`                                  | Reusable transports, TLS verification, explicit timeout and redirect policies     |
 | Concurrency    | Goroutines, `context`, bounded channels/semaphores   | Job cancellation and bounded resource consumption                                 |
-| Desktop shell  | Wails v3, pending spike                              | Verify tray, events, bindings, installers, and shutdown on each OS                |
+| Desktop shell  | Wails v3.0.0, M0 validation                          | Verify tray, events, bindings, installers, and shutdown on each OS                |
 | Frontend       | React, TypeScript, Vite                              | Generated bindings or typed adapters around Wails                                 |
 | Styling        | Tailwind CSS and accessible UI primitives            | Consistent keyboard, focus, and status behavior                                   |
 | Storage        | SQLite via `database/sql`                            | Proposed driver: `modernc.org/sqlite`; validate toolchain/platform compatibility  |

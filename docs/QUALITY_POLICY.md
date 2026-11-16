@@ -147,17 +147,17 @@ Require a reason for a budget increase and a visible policy/configuration diff. 
 
 ## 10. M0 acceptance criteria
 
-- [ ] Document and pin bootstrap toolchains, package manager, tools, and lockfiles.
-- [ ] Supply canonical check tasks and a clear list of gates not yet applicable.
-- [ ] Configure staged hooks without damaging partially staged work.
-- [ ] Configure Go checks immediately; activate TS checks when the shell/extension spike adds TS.
-- [ ] Wire CI to the same task implementation and configure required hosting checks.
-- [ ] Demonstrate failures with temporary controlled samples: formatting, lint/type errors, forbidden import, copied block, unused dependency, and dummy-secret fixture.
-- [ ] When test suites and bundle outputs exist, prove coverage and budget checks reject an intentional regression. Remove temporary probes after validation.
-- [ ] Configure clone exclusions and architecture entry points narrowly.
-- [ ] Record representative bundle measurements and commit initial numeric budgets.
-- [ ] Verify generated-file drift and dependency-manifest drift checks.
-- [ ] Document supported runner/platform limitations, including race-detector support.
+- [x] Document and pin bootstrap toolchains, package manager, tools, and lockfiles.
+- [x] Supply canonical check tasks and a clear list of gates not yet applicable.
+- [x] Configure staged hooks without damaging partially staged work.
+- [x] Configure Go checks immediately; activate TS checks when the shell/extension spike adds TS.
+- [x] Complete passing native CI evidence. The workflow uses canonical tasks and hosting protection is configured; actual runner architectures and successful run links are recorded in M0_EVIDENCE.md.
+- [x] Demonstrate failures with temporary controlled samples: formatting, lint/type errors, forbidden import, copied block, unused dependency, and dummy-secret fixture.
+- [x] When test suites and bundle outputs exist, prove coverage and budget checks reject an intentional regression. Remove temporary probes after validation.
+- [x] Configure clone exclusions and architecture entry points narrowly.
+- [x] Record representative bundle measurements and commit initial numeric budgets.
+- [x] Verify generated-file drift and dependency-manifest drift checks.
+- [x] Document supported runner/platform limitations, including race-detector support.
 
 Demonstrating rejection is part of implementing a gate; a check that only passes a clean scaffold has not yet shown that its wiring works. These are tooling acceptance checks, not a demand for permanent tests that merely mirror configurations.
 

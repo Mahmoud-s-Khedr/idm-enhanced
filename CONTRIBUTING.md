@@ -12,7 +12,7 @@ go run ./tools/quality check
 go run ./tools/quality check:full
 ```
 
-Bootstrap installs pinned Go executables under .tools/bin and frozen pnpm
+`bootstrap-deps` fetches the complete pinned Go module graph and frozen pnpm dependencies for native CI. Full bootstrap also installs pinned Go executables under .tools/bin and frozen pnpm
 dependencies, then installs Lefthook. It requires network access; hooks do not.
 Lefthook checks a disposable Git-index snapshot without altering partially staged
 work. Use `go run ./tools/quality task <name>` for focused checks. Run
