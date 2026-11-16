@@ -436,6 +436,11 @@ func coverage() error {
 		return errors.New("required Go logic suite empty")
 	}
 	for _, p := range strings.Fields(string(pkgs)) {
+		if runtime.GOOS != "linux" && strings.HasSuffix(p, "/internal/ipc") {
+			fmt.Printf("SKIP %s coverage on %s: live application IPC is deferred to M5; shared framing remains required in protocol and native-host integration tests\n", p, runtime.GOOS)
+			continue
+		}
+
 		c := counts[p]
 		if c.total == 0 {
 			return fmt.Errorf("%s has no measured statements", p)

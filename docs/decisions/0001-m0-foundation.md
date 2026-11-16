@@ -61,7 +61,10 @@ not linked into the application). Revisit license inventory/SBOM before release.
 ## Coverage scope
 
 All present handwritten application logic under `internal/` is subject to 80%
-per-package statements. Frontend App and extension connection/popup behavior use
+per-package statements on its supported platforms. Application IPC is Linux-only
+in M0, so live-IPC coverage is explicitly not applicable on Windows/macOS until M5.
+Those targets still require shared protocol coverage and native-host framing/error
+process tests; a reported skip must not imply a working live IPC bridge. Frontend App and extension connection/popup behavior use
 80% statements/lines/functions and 75% branches per file. Generated bindings,
 generated protocol types, the root render call, asset embedding and minimal
 framework/native command registration are excluded. Tooling is validated through
