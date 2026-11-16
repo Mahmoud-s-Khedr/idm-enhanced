@@ -1,0 +1,5 @@
+{
+  "name": "@idm/shared",
+  "private": true,
+  "type": "module"
+}

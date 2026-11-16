@@ -1,0 +1,13 @@
+{
+  "name": "@idm/desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@wailsio/runtime": "3.0.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "ignoreBinaries": ["go"],
+  "workspaces": {
+    ".": {
+      "entry": ["vite*.ts"],
+      "project": ["*.ts", "*.mjs", ".dependency-cruiser.cjs"],
+      "ignoreDependencies": [
+        "dependency-cruiser",
+        "jscpd",
+        "prettier",
+        "lefthook"
+      ],
+      "lefthook": false
+    },
+    "frontend": {
+      "entry": ["src/**/*.test.tsx"],
+      "project": ["src/**/*.{ts,tsx}", "bindings/**/*.ts"],
+      "ignore": ["bindings/**"]
+    },
+    "extensions/shared": {
+      "entry": ["src/popup.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "extensions/firefox": {},
+    "extensions/chromium": {}
+  }
+}

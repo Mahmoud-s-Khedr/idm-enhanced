@@ -1,0 +1,14 @@
+version: '2'
+run:
+  timeout: 5m
+  build-tags: [integration]
+linters:
+  default: none
+  enable: [dupl]
+  settings:
+    dupl:
+      threshold: 100
+  exclusions:
+    rules:
+      - path-except: _test\.go$
+        linters: [dupl]

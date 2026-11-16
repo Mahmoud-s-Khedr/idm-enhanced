@@ -1,0 +1,523 @@
+// Command quality owns the repository's validation entry points.
+package main
+
+import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+type tool struct {
+	Module  string `json:"module"`
+	Version string `json:"version"`
+}
+type versions struct {
+	Go    string          `json:"go"`
+	Node  string          `json:"node"`
+	PNPM  string          `json:"pnpm"`
+	Tools map[string]tool `json:"tools"`
+}
+
+var pins versions
+var root string
+
+func main() {
+	var err error
+	root, err = os.Getwd()
+	must(err)
+	data, err := os.ReadFile("tools/versions.json")
+	must(err)
+	must(json.Unmarshal(data, &pins))
+	// Explicit bootstrap is the only command that may install tools.
+	local := filepath.Join(root, ".tools", "bin")
+	node := filepath.Join(root, ".tools", "node-v"+pins.Node+"-"+runtime.GOOS+"-"+nodeArch(), "bin")
+	must(os.Setenv("PATH", strings.Join([]string{node, filepath.Join(root, ".tools", "pnpm", "node_modules", ".bin"), local, os.Getenv("PATH")}, string(os.PathListSeparator))))
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] != "bootstrap" {
+		must(os.Setenv("GOPROXY", "off"))
+		must(os.Setenv("GOTOOLCHAIN", "local"))
+	}
+
+	if len(args) == 0 {
+		fatal(errors.New("usage: quality doctor|bootstrap|check|check:full|task <name>|gate-probes"))
+	}
+	switch args[0] {
+	case "doctor":
+		err = doctor()
+	case "bootstrap":
+		err = bootstrap()
+	case "check", "check:full":
+		names := []string{"versions", "build", "format", "lint-go", "lint-ts", "types", "deadcode", "architecture", "clones", "test-clones", "mod-drift", "test-go", "test-tools", "test-ts", "bindings", "budgets"}
+		if args[0] == "check:full" {
+			names = append(names, "race", "integration", "secrets", "vuln")
+		}
+		err = sequence(names)
+	case "task":
+		if len(args) != 2 {
+			err = errors.New("task requires exactly one name")
+		} else {
+			err = task(args[1])
+		}
+	case "gate-probes":
+		err = probes()
+	default:
+		err = fmt.Errorf("unknown command %q", args[0])
+	}
+	if err != nil {
+		fatal(err)
+	}
+}
+func must(err error) {
+	if err != nil {
+		fatal(err)
+	}
+}
+func fatal(err error) { fmt.Fprintln(os.Stderr, "FAIL:", err); os.Exit(1) }
+func nodeArch() string {
+	if runtime.GOARCH == "amd64" {
+		return "x64"
+	}
+	return runtime.GOARCH
+}
+func command(name string, args ...string) error {
+	fmt.Println("+", name, strings.Join(args, " "))
+	c := exec.Command(name, args...)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	c.Stdin = os.Stdin
+	return c.Run()
+}
+func output(name string, args ...string) ([]byte, error) {
+	c := exec.Command(name, args...)
+	c.Stderr = os.Stderr
+	return c.Output()
+}
+func sequence(names []string) error {
+	for _, n := range names {
+		fmt.Println("TASK", n)
+		if err := task(n); err != nil {
+			return fmt.Errorf("%s: %w", n, err)
+		}
+	}
+	return nil
+}
+func binary(n string) string {
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	return filepath.Join(root, ".tools", "bin", n+suffix)
+}
+func pnpm(args ...string) error {
+	// Run installed binaries directly: pnpm exec may auto-install when a disposable
+	// snapshot has a different workspace path, violating offline gate semantics.
+	if len(args) > 1 && args[0] == "exec" {
+		ext := ""
+		if runtime.GOOS == "windows" {
+			ext = ".cmd"
+		}
+		return command(filepath.Join(root, "node_modules", ".bin", args[1]+ext), args[2:]...)
+	}
+
+	name := "pnpm"
+	if runtime.GOOS == "windows" {
+		name = "pnpm.cmd"
+	}
+	return command(name, args...)
+}
+func task(n string) error {
+	switch n {
+	case "versions":
+		return checkVersions()
+	case "format":
+		if err := goFormat(); err != nil {
+			return err
+		}
+		return pnpm("exec", "prettier", "--check", ".")
+	case "lint-go":
+		return command(binary("golangci-lint"), "run", "./...")
+	case "lint-ts":
+		return pnpm("exec", "eslint", ".", "--max-warnings=0")
+	case "types":
+		return pnpm("exec", "tsc", "-p", "tsconfig.json")
+	case "deadcode":
+		return pnpm("exec", "knip")
+	case "architecture":
+		return pnpm("exec", "depcruise", "--config", ".dependency-cruiser.cjs", "frontend/src", "extensions/shared/src")
+	case "clones":
+		return pnpm("exec", "jscpd", "frontend/src", "extensions/shared/src")
+	case "test-clones":
+		if err := command(binary("golangci-lint"), "run", "--config", ".golangci-tests.yml", "--issues-exit-code=0", "./..."); err != nil {
+			return err
+		}
+		return pnpm("exec", "jscpd", "--config", ".jscpd-tests.json", "frontend/src", "extensions/shared/src")
+	case "mod-drift":
+		return modDrift()
+	case "test-go":
+		if err := command("go", "test", "-count=1", "-coverprofile=coverage.go.prof", "./internal/..."); err != nil {
+			return err
+		}
+		return coverage()
+	case "test-tools":
+		return command("go", "test", "-count=1", "./tools/...")
+	case "test-ts":
+		return pnpm("exec", "vitest", "run", "--coverage")
+	case "race":
+		if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+			return fmt.Errorf("race detector unsupported on %s/%s; require a supported CI runner", runtime.GOOS, runtime.GOARCH)
+		}
+		return command("go", "test", "-race", "-count=1", "./internal/...", "./tools/...")
+	case "integration":
+		return command("go", "test", "-count=1", "-tags=integration", "./integration/...")
+	case "bindings":
+		if err := command("go", "run", "./tools/contract", "-check"); err != nil {
+			return err
+		}
+		return bindings(false)
+	case "generate":
+		return bindings(true)
+	case "build":
+		if err := pnpm("exec", "vite", "build", "--config", "vite.config.ts"); err != nil {
+			return err
+		}
+		if err := pnpm("exec", "vite", "build", "--config", "vite.extensions.config.ts"); err != nil {
+			return err
+		}
+		if err := command("go", "build", "-trimpath", "-o", "build/", "./cmd/..."); err != nil {
+			return err
+		}
+		return nil
+	case "budgets":
+		return budgets()
+	case "secrets":
+		return command(binary("gitleaks"), "dir", ".", "--redact", "--no-banner")
+	case "history-secrets":
+		return command(binary("gitleaks"), "git", ".", "--redact", "--no-banner")
+	case "vuln":
+		if err := command(binary("govulncheck"), "./..."); err != nil {
+			return err
+		}
+		return pnpm("audit", "--audit-level=high")
+	case "staged":
+		return staged()
+	case "browser-smoke":
+		return command("node", "tools/browser-smoke.mjs")
+	case "register":
+		return registration(false)
+	case "unregister":
+		return registration(true)
+	case "aggregate":
+		return aggregate(os.Getenv("QUALITY_NEEDS"))
+	default:
+		return fmt.Errorf("unknown task %q", n)
+	}
+}
+func checkVersions() error {
+	checks := []struct {
+		name string
+		args []string
+		want string
+	}{{"go", []string{"version"}, "go" + pins.Go}, {"node", []string{"--version"}, "v" + pins.Node}, {"pnpm", []string{"--version"}, pins.PNPM}}
+	for _, c := range checks {
+		b, e := output(c.name, c.args...)
+		if e != nil {
+			return e
+		}
+		if !strings.Contains(string(b), c.want) {
+			return fmt.Errorf("%s: expected %s, got %s", c.name, c.want, b)
+		}
+	}
+	for n, p := range pins.Tools {
+		args := []string{"--version"}
+		if n == "wails3" {
+			args = []string{"version"}
+		}
+		if n == "gitleaks" {
+			args = []string{"version"}
+		}
+		b, e := exec.Command(binary(n), args...).CombinedOutput()
+		if e != nil {
+			return e
+		}
+		if !strings.Contains(string(b), strings.TrimPrefix(p.Version, "v")) {
+			return fmt.Errorf("%s expected %s, got %s", n, p.Version, b)
+		}
+	}
+	return nil
+}
+func doctor() error {
+	fmt.Printf("Platform: %s/%s\nPins: Go %s, Node %s, pnpm %s\n", runtime.GOOS, runtime.GOARCH, pins.Go, pins.Node, pins.PNPM)
+	versionErr := checkVersions()
+	if versionErr != nil {
+		fmt.Println("Tool diagnosis:", versionErr)
+	}
+	var nativeErr error
+	if runtime.GOOS == "linux" {
+		nativeErr = command("pkg-config", "--modversion", "gtk4", "webkitgtk-6.0")
+		for _, b := range []string{"firefox", "chromium-browser", "google-chrome"} {
+			p, e := exec.LookPath(b)
+			fmt.Printf("Browser %s: %s (%v)\n", b, p, e)
+		}
+	} else {
+		fmt.Println("Live native messaging registration/IPC deferred to M5; framing and desktop native builds required.")
+	}
+	return errors.Join(versionErr, nativeErr)
+}
+func bootstrap() error {
+	if !strings.Contains(runtime.Version(), "go"+pins.Go) {
+		return fmt.Errorf("install Go %s first", pins.Go)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".tools", "bin"), 0755); err != nil {
+		return err
+	}
+	for n, p := range pins.Tools {
+		args := []string{"install"}
+		if n == "gitleaks" {
+			args = append(args, "-ldflags=-X github.com/zricethezav/gitleaks/v8/version.Version="+p.Version)
+		}
+		args = append(args, p.Module+"@"+p.Version)
+		c := exec.Command("go", args...)
+		c.Env = append(os.Environ(), "GOBIN="+filepath.Join(root, ".tools", "bin"))
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		fmt.Println("Install", n, p.Version)
+		if err := c.Run(); err != nil {
+			return err
+		}
+	}
+	if err := command("go", "mod", "download"); err != nil {
+		return err
+	}
+	if err := pnpm("install", "--frozen-lockfile"); err != nil {
+		return err
+	}
+	return pnpm("exec", "lefthook", "install")
+}
+func goFormat() error {
+	var files []string
+	err := filepath.WalkDir(".", func(p string, d fs.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		if d.IsDir() && (d.Name() == ".git" || d.Name() == ".tools" || d.Name() == "node_modules") {
+			return filepath.SkipDir
+		}
+		if !d.IsDir() && strings.HasSuffix(p, ".go") {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return errors.New("go source suite is empty")
+	}
+	b, e := output("gofmt", append([]string{"-l"}, files...)...)
+	if e != nil {
+		return e
+	}
+	if len(b) > 0 {
+		return fmt.Errorf("gofmt required:\n%s", b)
+	}
+	return nil
+}
+func modDrift() error {
+	// -diff reports proposed changes and never rewrites the manifests.
+	return command("go", "mod", "tidy", "-diff")
+}
+
+func coverage() error {
+	b, e := os.ReadFile("coverage.go.prof")
+	if e != nil {
+		return e
+	}
+	type count struct{ total, covered int }
+	counts := map[string]count{}
+	for _, line := range strings.Split(string(b), "\n")[1:] {
+		f := strings.Fields(line)
+		if len(f) != 3 {
+			continue
+		}
+		n, e := strconv.Atoi(f[1])
+		if e != nil {
+			return e
+		}
+		hits, e := strconv.Atoi(f[2])
+		if e != nil {
+			return e
+		}
+		pkg := filepath.ToSlash(filepath.Dir(strings.Split(f[0], ":")[0]))
+		c := counts[pkg]
+		c.total += n
+		if hits > 0 {
+			c.covered += n
+		}
+		counts[pkg] = c
+	}
+	pkgs, e := output("go", "list", "./internal/...")
+	if e != nil {
+		return e
+	}
+	if len(strings.Fields(string(pkgs))) == 0 {
+		return errors.New("required Go logic suite empty")
+	}
+	for _, p := range strings.Fields(string(pkgs)) {
+		c := counts[p]
+		if c.total == 0 {
+			return fmt.Errorf("%s has no measured statements", p)
+		}
+		pct := 100 * float64(c.covered) / float64(c.total)
+		fmt.Printf("%s %.1f%%\n", p, pct)
+		if pct < 80 {
+			return fmt.Errorf("%s below 80%%", p)
+		}
+	}
+	return nil
+}
+func bindings(write bool) error {
+	dest := "frontend/bindings"
+	if !write {
+		d, e := os.MkdirTemp("", "idm-bindings-")
+		if e != nil {
+			return e
+		}
+		defer cleanup(d)
+		dest = d
+	}
+	if e := command(binary("wails3"), "generate", "bindings", "-ts", "-noevents", "-d", dest, "./cmd/desktop"); e != nil {
+		return e
+	}
+	if write {
+		return nil
+	}
+	a, e := tree("frontend/bindings")
+	if e != nil {
+		return e
+	}
+	b, e := tree(dest)
+	if e != nil {
+		return e
+	}
+	if len(a) == 0 || len(a) != len(b) {
+		return errors.New("generated binding file set drift; run task generate")
+	}
+	for p, v := range a {
+		if !bytes.Equal(v, b[p]) {
+			return fmt.Errorf("binding drift %s; run task generate", p)
+		}
+	}
+	return nil
+}
+func tree(dir string) (map[string][]byte, error) {
+	m := map[string][]byte{}
+	e := filepath.WalkDir(dir, func(p string, d fs.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		if !d.IsDir() {
+			b, e := os.ReadFile(p)
+			if e != nil {
+				return e
+			}
+			r, e := filepath.Rel(dir, p)
+			if e != nil {
+				return e
+			}
+			m[r] = b
+		}
+		return nil
+	})
+	return m, e
+}
+
+type budget struct {
+	Raw  int `json:"raw"`
+	Gzip int `json:"gzip"`
+}
+
+func budgets() error {
+	b, e := os.ReadFile("tools/budgets.json")
+	if e != nil {
+		return e
+	}
+	var limits map[string]budget
+	if e = json.Unmarshal(b, &limits); e != nil {
+		return e
+	}
+	if len(limits) != 3 {
+		return errors.New("desktop, Firefox, Chromium budgets required")
+	}
+	keys := make([]string, 0, len(limits))
+	for k := range limits {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, dir := range keys {
+		files, e := tree(dir)
+		if e != nil {
+			return e
+		}
+		raw, zipped, n := 0, 0, 0
+		for p, b := range files {
+			ext := filepath.Ext(p)
+			if ext != ".js" && ext != ".css" {
+				continue
+			}
+			n++
+			raw += len(b)
+			var z bytes.Buffer
+			g := gzip.NewWriter(&z)
+			if _, e = g.Write(b); e != nil {
+				return e
+			}
+			if e = g.Close(); e != nil {
+				return e
+			}
+			zipped += z.Len()
+		}
+		if n == 0 {
+			return fmt.Errorf("%s contains no application assets", dir)
+		}
+		v := limits[dir]
+		fmt.Printf("%s raw=%d/%d gzip=%d/%d\n", dir, raw, v.Raw, zipped, v.Gzip)
+		if raw > v.Raw || zipped > v.Gzip {
+			return fmt.Errorf("bundle budget exceeded: %s", dir)
+		}
+	}
+	return nil
+}
+func aggregate(s string) error {
+	var needs map[string]struct {
+		Result string `json:"result"`
+	}
+	if e := json.Unmarshal([]byte(s), &needs); e != nil {
+		return e
+	}
+	for _, name := range []string{"quality", "native"} {
+		n, ok := needs[name]
+		if !ok || n.Result != "success" {
+			return fmt.Errorf("mandatory job %s: %q", name, n.Result)
+		}
+	}
+	if len(needs) != 2 {
+		return errors.New("unexpected CI dependency set")
+	}
+	return nil
+}
+
+func cleanup(path string) {
+	if e := os.RemoveAll(path); e != nil {
+		fmt.Fprintln(os.Stderr, "Temporary cleanup failed:", e)
+	}
+}

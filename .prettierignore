@@ -1,0 +1,10 @@
+.tools
+node_modules
+**/dist
+frontend/bindings
+research_notes
+pnpm-lock.yaml
+go.sum
+coverage
+build
+extensions/shared/src/contract.ts

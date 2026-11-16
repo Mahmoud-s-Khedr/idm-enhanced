@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "IDM Enhanced M0",
+  "version": "0.0.1",
+  "description": "Test the running IDM Enhanced desktop connection.",
+  "permissions": ["nativeMessaging"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "idm-enhanced-dev@mahmoud-khedr.dev",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

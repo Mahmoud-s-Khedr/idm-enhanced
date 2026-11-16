@@ -1,0 +1,5 @@
+{
+  "name": "@idm/chromium",
+  "private": true,
+  "type": "module"
+}

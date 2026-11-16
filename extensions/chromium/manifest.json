@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "IDM Enhanced M0",
+  "version": "0.0.1",
+  "description": "Test the running IDM Enhanced desktop connection.",
+  "permissions": ["nativeMessaging"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuwH9S1xP7w7OD5PZelB6OVojBczVqoKrg82sWbeoQ6JSuFk4bKPVHKD67ULCk/RRuwd57bAMqTDaWWRlYl0kjrWkEEHGQBvBOviBulrQheNtdqtK/epi464yEHOvoA4KVwfVFMIeBUKxQLLmRqz5c0xxUQtFJlZHgbcSEo9+0GT3G/OwI8+8GuQVs6Aw8xLFgS2LF+75Zrm6GZhGO1WKLL5MN2KfNO5fQ6maqEPHekmclwyhsLgELd3HgGkIAfIoz6MXrPEpGcns9ul+bBB5HcC0ROLTHZerGICbeQLxkR4WhzgSnlMPOg+LL/ULV5cRaWDfbPCFMrvR6DG2tTYAdQIDAQAB"
+}

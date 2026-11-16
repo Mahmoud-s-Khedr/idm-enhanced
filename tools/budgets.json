@@ -1,0 +1,14 @@
+{
+  "extensions/chromium/dist": {
+    "gzip": 9642,
+    "raw": 11195
+  },
+  "extensions/firefox/dist": {
+    "gzip": 9642,
+    "raw": 11195
+  },
+  "frontend/dist": {
+    "gzip": 103429,
+    "raw": 303185
+  }
+}

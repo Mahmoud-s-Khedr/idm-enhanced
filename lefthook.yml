@@ -1,0 +1,7 @@
+pre-commit:
+  commands:
+    staged:
+      env:
+        GOTOOLCHAIN: local
+        GOPROXY: off
+      run: go run ./tools/quality task staged

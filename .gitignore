@@ -1,0 +1,9 @@
+.tools/
+node_modules/
+**/dist/
+build/
+coverage/
+*.prof
+*.test
+*.log
+.DS_Store

@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Installed tools, dependencies, generated builds and Git object storage"
+paths = ['''(^|/)\.tools/''', '''(^|/)node_modules/''', '''(^|/)\.git/''', '''^build/''', '''^coverage/''', '''^frontend/dist/''', '''^extensions/(shared|firefox|chromium)/dist/''']
+
+[[allowlists]]
+description = "Exact public Chromium development extension key (no private key exists in repository)"
+condition = "AND"
+paths = ['''^extensions/chromium/manifest\.json$''']
+regexTarget = "secret"
+regexes = ['''^MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuwH9S1xP7w7OD5PZelB6OVojBczVqoKrg82sWbeoQ6JSuFk4bKPVHKD67ULCk/RRuwd57bAMqTDaWWRlYl0kjrWkEEHGQBvBOviBulrQheNtdqtK/epi464yEHOvoA4KVwfVFMIeBUKxQLLmRqz5c0xxUQtFJlZHgbcSEo9\+0GT3G/OwI8\+8GuQVs6Aw8xLFgS2LF\+75Zrm6GZhGO1WKLL5MN2KfNO5fQ6maqEPHekmclwyhsLgELd3HgGkIAfIoz6MXrPEpGcns9ul\+bBB5HcC0ROLTHZerGICbeQLxkR4WhzgSnlMPOg\+LL/ULV5cRaWDfbPCFMrvR6DG2tTYAdQIDAQAB$''']
