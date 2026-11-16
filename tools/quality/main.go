@@ -523,7 +523,23 @@ func cleanup(path string) {
 
 // bootstrapDeps is the explicit network setup used by native-build jobs.
 func bootstrapDeps() error {
-	if err := command("go", "mod", "download"); err != nil {
+	// Prefetch the complete pinned module graph, including dependency tests used
+	// by tidy. A temporary modfile keeps download-only sums out of the source lock.
+	dir, err := os.MkdirTemp("", "idm-bootstrap-")
+	if err != nil {
+		return err
+	}
+	defer cleanup(dir)
+	for _, name := range []string{"go.mod", "go.sum"} {
+		b, e := os.ReadFile(name)
+		if e != nil {
+			return e
+		}
+		if e = os.WriteFile(filepath.Join(dir, name), b, 0600); e != nil {
+			return e
+		}
+	}
+	if err := command("go", "mod", "download", "-modfile="+filepath.Join(dir, "go.mod"), "all"); err != nil {
 		return err
 	}
 	return pnpm("install", "--frozen-lockfile")

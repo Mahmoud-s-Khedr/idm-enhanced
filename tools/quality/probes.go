@@ -94,6 +94,38 @@ func probes() error {
 		{"bindings", "bindings", "internal/desktop/service.go", "\nfunc(s *Service) NewContractProbe() string { return \"drift\" }\n"},
 	}
 	var report strings.Builder
+	// Regression check: output directories must not accumulate chunks from older builds.
+	snapshots := map[string]map[string][]byte{}
+	for _, d := range []string{"frontend/dist", "extensions/firefox/dist", "extensions/chromium/dist"} {
+		m, err := tree(filepath.Join(dir, d))
+		if err != nil {
+			return err
+		}
+		snapshots[d] = m
+	}
+	stale := filepath.Join(dir, "extensions/chromium/dist/stale.js")
+	if e = os.WriteFile(stale, []byte("stale generated asset"), 0644); e != nil {
+		return e
+	}
+	if b, err := run("task", "build"); err != nil {
+		return fmt.Errorf("repeated build: %s", b)
+	}
+	for d, before := range snapshots {
+		after, err := tree(filepath.Join(dir, d))
+		if err != nil {
+			return err
+		}
+		if len(before) != len(after) {
+			return fmt.Errorf("repeated build changed asset set: %s", d)
+		}
+		for p, b := range before {
+			if !bytes.Equal(b, after[p]) {
+				return fmt.Errorf("repeated build changed asset bytes: %s/%s", d, p)
+			}
+		}
+	}
+	fmt.Fprintln(&report, "PASS repeated builds remove stale assets and preserve byte-identical output")
+
 	var details strings.Builder
 	expected := map[string]string{"format": "gofmt required", "lint": "no-unused-vars", "types": "TS2322", "ts-boundary": "extension-no-frontend", "ts-clone": "clones", "unused-dependency": "unused-probe", "manifest-drift": "example.com/unused", "secret": "leaks found", "go-coverage": "below 80%", "ts-coverage": "Coverage", "bundle": "bundle budget exceeded", "bindings": "binding drift"}
 

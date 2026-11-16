@@ -60,7 +60,7 @@ separate reviewed budgets when introduced.
 - `go run ./tools/quality doctor`: passed, exact tools and native dependencies diagnosed.
 - `go run ./tools/quality check`: passed before final documentation reconciliation; final rerun pending.
 - `go run ./tools/quality check:full`: passed locally, including build, coverage, race, subprocess integration and both vulnerability scanners.
-- `go run ./tools/quality gate-probes`: passed all 16 controlled rejection checks in a disposable copy; results in build/gate-probes.txt.
+- `go run ./tools/quality gate-probes`: passed all 17 controlled rejection checks in a disposable copy; results in build/gate-probes.txt.
 - `go run ./tools/quality task integration`: passed, including the actual five-second stdin deadline.
 - `go run ./tools/quality task vuln`: passed, no known/reachable Go or high/critical JS vulnerabilities reported at execution time.
 - Coverage: desktop state 100%, IPC 87.4%, protocol 98.3% statements. TS behavior suite passed its per-file thresholds.
@@ -72,7 +72,9 @@ was configured and read back: PRs required, Required checks required with strict
 up-to-date branches, admins included, zero mandatory approving reviewers, force
 pushes/deletion blocked. Native CI run links will be recorded after successful runs.
 The first hosted run exposed a missing module-cache bootstrap in native matrix
-jobs; the follow-up adds explicit dependency bootstrap before offline builds.
+jobs and missing dependency-test modules for offline tidy. Explicit bootstrap now
+prefetches the pinned module graph using a temporary manifest before offline builds.
+The required aggregate rejected the failed jobs, as configured.
 Repeated local builds remove stale extension assets and produce byte-identical
 asset fingerprints. Current extension output is 2537 raw / 1209 gzip bytes, within
 the unchanged initial budgets. The first calibration (2502 / 1208) remains recorded above. Windows/macOS interactive launch remains
