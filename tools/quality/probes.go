@@ -89,6 +89,7 @@ func probes() error {
 		{"empty-suite", "test-tools", "tools/quality/main_test.go", ""},
 		{"manifest-drift", "mod-drift", "go.mod", "\nrequire example.com/unused v1.0.0\n"},
 		{"secret", "secrets", "secret-probe.txt", ""},
+		{"critical-coverage", "test-go", "internal/engine/transfer.go", "\nfunc UncoveredCriticalProbe(x int) int {\n" + strings.Join(strings.Split(uncovered(), "\n")[:12], "\n") + "\nreturn x\n}\n"},
 		{"go-coverage", "test-go", "internal/protocol/protocol.go", "\nfunc UncoveredProbe(x int) int {\n" + uncovered() + "return x\n}\n"},
 		{"ts-coverage", "test-ts", "extensions/shared/src/connection.ts", "\nexport function uncoveredProbe(x: number) {\n" + strings.ReplaceAll(strings.ReplaceAll(uncovered(), "if x == ", "if (x === "), " { x = ", ") { x = ") + "return x;\n}\n"},
 		{"bundle", "budgets", "frontend/dist/probe.js", strings.Repeat("x", 1024*1024)},
@@ -128,7 +129,7 @@ func probes() error {
 	fmt.Fprintln(&report, "PASS repeated builds remove stale assets and preserve byte-identical output")
 
 	var details strings.Builder
-	expected := map[string]string{"format": "gofmt required", "lint": "no-unused-vars", "types": "TS2322", "ts-boundary": "extension-no-frontend", "ts-clone": "clones", "unused-dependency": "unused-probe", "empty-suite": "required Go test suite is empty", "manifest-drift": "example.com/unused", "secret": "leaks found", "go-coverage": "below 80%", "ts-coverage": "Coverage", "bundle": "bundle budget exceeded", "bindings": "binding drift"}
+	expected := map[string]string{"format": "gofmt required", "lint": "no-unused-vars", "types": "TS2322", "ts-boundary": "extension-no-frontend", "ts-clone": "clones", "unused-dependency": "unused-probe", "empty-suite": "required Go test suite is empty", "manifest-drift": "example.com/unused", "secret": "leaks found", "go-coverage": "below 80%", "critical-coverage": "below 90%", "ts-coverage": "Coverage", "bundle": "bundle budget exceeded", "bindings": "binding drift"}
 
 	for _, p := range probes {
 		path := filepath.Join(dir, p.path)
@@ -172,15 +173,18 @@ func probes() error {
 		}
 	}
 	// Go depguard and dupl must reject independently of type errors.
-	for _, mode := range []string{"boundary", "clone"} {
+	for _, mode := range []string{"boundary", "storage-boundary", "clone"} {
 		path := filepath.Join(dir, "internal/engine/probe.go")
 		if e = os.MkdirAll(filepath.Dir(path), 0755); e != nil {
 			return e
 		}
 		s := "package engine\n"
-		if mode == "boundary" {
+		switch mode {
+		case "boundary":
 			s += "import _ \"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop\"\n"
-		} else {
+		case "storage-boundary":
+			s += "import _ \"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/storage\"\n"
+		default:
 			body := ""
 			for i := range 30 {
 				body += fmt.Sprintf("x += %d\n", i)
@@ -196,7 +200,7 @@ func probes() error {
 		if e = os.Remove(path); e != nil {
 			return e
 		}
-		if err == nil || !bytes.Contains(b, []byte(map[string]string{"boundary": "depguard", "clone": "dupl"}[mode])) {
+		if err == nil || !bytes.Contains(b, []byte(map[string]string{"boundary": "depguard", "storage-boundary": "depguard", "clone": "dupl"}[mode])) {
 			return fmt.Errorf("go %s probe not rejected by intended analyzer: %s", mode, b)
 		}
 		fmt.Fprintln(&report, "PASS rejected go-"+mode)

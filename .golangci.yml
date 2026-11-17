@@ -22,6 +22,12 @@ linters:
           files:
             - '${base-path}/internal/engine/**'
           deny:
+            - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/storage
+              desc: Engine cannot depend on persistence
+            - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager
+              desc: Engine cannot depend on lifecycle policy
+            - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/cli
+              desc: Engine cannot depend on CLI presentation
             - pkg: github.com/wailsapp/wails
               desc: Engine must remain independent of desktop adapters
             - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop

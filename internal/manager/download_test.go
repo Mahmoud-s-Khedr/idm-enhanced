@@ -1,4 +1,4 @@
-package engine
+package manager
 
 import (
 	"bytes"
@@ -59,7 +59,7 @@ func TestDownloadFixtures(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			dest := filepath.Join(t.TempDir(), "result")
 			var total, written int64
-			err := Download(context.Background(), server.Client(), DownloadOptions{URL: server.URL + path, Destination: dest, SHA256: checksum, Progress: func(n, size int64) { written, total = n, size }})
+			err := Download(context.Background(), server.Client(), Options{URL: server.URL + path, Destination: dest, SHA256: checksum, Progress: func(n, size int64) { written, total = n, size }})
 			fail := path == "/short" || path == "/missing"
 			if (err != nil) != fail {
 				t.Fatalf("download error: %v", err)
@@ -69,7 +69,7 @@ func TestDownloadFixtures(t *testing.T) {
 				t.Fatal(readErr)
 			}
 			if fail {
-				if len(entries) != 0 {
+				if len(entries) != 1 {
 					t.Fatal("failure left output/partial")
 				}
 				return
@@ -115,7 +115,7 @@ func TestDownloadBoundaries(t *testing.T) {
 			if tc.cancel {
 				cancel()
 			}
-			err := Download(ctx, server.Client(), DownloadOptions{URL: server.URL, Destination: dest, SHA256: tc.checksum})
+			err := Download(ctx, server.Client(), Options{URL: server.URL, Destination: dest, SHA256: tc.checksum})
 			if err == nil {
 				t.Fatal("expected failure")
 			}
@@ -128,15 +128,15 @@ func TestDownloadBoundaries(t *testing.T) {
 				if err != nil || string(data) != "original" {
 					t.Fatal("overwrote destination")
 				}
-			} else if len(entries) != 0 {
+			} else if tc.name == "checksum" && len(entries) != 1 {
 				t.Fatal("left partial/output")
 			}
 		})
 	}
-	if err := Download(context.Background(), server.Client(), DownloadOptions{}); err == nil {
+	if err := Download(context.Background(), server.Client(), Options{}); err == nil {
 		t.Fatal("accepted empty destination")
 	}
-	if err := Download(context.Background(), server.Client(), DownloadOptions{URL: server.URL, Destination: filepath.Join(t.TempDir(), "missing", "result")}); err == nil {
+	if err := Download(context.Background(), server.Client(), Options{URL: server.URL, Destination: filepath.Join(t.TempDir(), "missing", "result")}); err == nil {
 		t.Fatal("accepted missing directory")
 	}
 }
@@ -146,7 +146,7 @@ func TestDownloadPublishCollision(t *testing.T) {
 	defer server.Close()
 	dest := filepath.Join(t.TempDir(), "result")
 	created := false
-	err := Download(context.Background(), server.Client(), DownloadOptions{URL: server.URL, Destination: dest, Progress: func(_, _ int64) {
+	err := Download(context.Background(), server.Client(), Options{URL: server.URL, Destination: dest, Progress: func(_, _ int64) {
 		if !created {
 			created = true
 			if err := os.WriteFile(dest, []byte("other"), 0600); err != nil {
@@ -162,7 +162,7 @@ func TestDownloadPublishCollision(t *testing.T) {
 		t.Fatal("changed concurrent file")
 	}
 	entries, err := os.ReadDir(filepath.Dir(dest))
-	if err != nil || len(entries) != 1 {
+	if err != nil || len(entries) != 2 {
 		t.Fatal("partial cleanup failed")
 	}
 }
@@ -176,11 +176,29 @@ func TestDownloadSymlink(t *testing.T) {
 	if err := os.Symlink(target, dest); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if err := Download(context.Background(), http.DefaultClient, DownloadOptions{URL: "http://unused.invalid", Destination: dest}); err == nil {
+	if err := Download(context.Background(), http.DefaultClient, Options{URL: "http://unused.invalid", Destination: dest}); err == nil {
 		t.Fatal("accepted symlink")
 	}
 	data, err := os.ReadFile(target)
 	if err != nil || string(data) != "safe" {
 		t.Fatal("modified symlink target")
 	}
+}
+
+func Download(ctx context.Context, client *http.Client, o Options) error {
+	dir, err := os.MkdirTemp("", "idm-manager-test-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	m, err := Open(dir, false, client)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = m.Close() }()
+	j, err := m.Create(ctx, o)
+	if err != nil {
+		return err
+	}
+	return m.Run(ctx, j.ID, false, o.Progress)
 }

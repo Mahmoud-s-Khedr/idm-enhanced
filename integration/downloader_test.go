@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,7 +42,7 @@ func TestDownloaderProcess(t *testing.T) {
 	t.Run("verified file", func(t *testing.T) {
 		dest := filepath.Join(t.TempDir(), "download")
 		checksum := fmt.Sprintf("%x", sha256.Sum256([]byte("process fixture")))
-		cmd := exec.Command(name, "-o", dest, "-sha256", checksum, server.URL)
+		cmd := exec.Command(name, "--state-dir", t.TempDir(), "-o", dest, "-sha256", checksum, server.URL)
 		if b, err := cmd.CombinedOutput(); err != nil || !bytes.Contains(b, []byte("Download complete")) {
 			t.Fatalf("process: %s %v", b, err)
 		}
@@ -57,7 +58,7 @@ func TestDownloaderProcess(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		dir := t.TempDir()
-		cmd := exec.CommandContext(ctx, name, "-o", filepath.Join(dir, "download"), server.URL+"/stall")
+		cmd := exec.CommandContext(ctx, name, "--state-dir", t.TempDir(), "-o", filepath.Join(dir, "download"), server.URL+"/stall")
 		var output bytes.Buffer
 		cmd.Stderr = &output
 		if err := cmd.Start(); err != nil {
@@ -80,8 +81,94 @@ func TestDownloaderProcess(t *testing.T) {
 			t.Fatalf("interrupt: %v %s", err, &output)
 		}
 		entries, err := os.ReadDir(dir)
-		if err != nil || len(entries) != 0 {
-			t.Fatal("interrupt left partial/output")
+		if err != nil || len(entries) != 1 {
+			t.Fatal("interrupt did not retain exactly one partial")
 		}
 	})
+}
+
+func TestDownloaderResumeProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Go cannot deliver SIGINT on Windows; native process-kill recovery is covered by manager tests")
+	}
+	name := filepath.Join(t.TempDir(), "downloader")
+	if output, err := exec.Command("go", "build", "-o", name, "../cmd/downloader").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, output)
+	}
+	data := bytes.Repeat([]byte("resume fixture"), 32768)
+	started := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"stable"`)
+		value := r.Header.Get("Range")
+		if value == "bytes=0-0" {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-0/%d", len(data)))
+			w.WriteHeader(206)
+			_, _ = w.Write(data[:1])
+			return
+		}
+		if value != "" {
+			var offset int
+			if _, err := fmt.Sscanf(value, "bytes=%d-", &offset); err != nil || offset < 0 || offset >= len(data) {
+				w.WriteHeader(416)
+				return
+			}
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", offset, len(data)-1, len(data)))
+			w.WriteHeader(206)
+			_, _ = w.Write(data[offset:])
+			return
+		}
+		w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+		_, _ = w.Write(data[:32768])
+		w.(http.Flusher).Flush()
+		started <- struct{}{}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	state := t.TempDir()
+	dest := filepath.Join(t.TempDir(), "result")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, "--state-dir", state, "-quiet", "-o", dest, server.URL+"?token=private")
+	var output bytes.Buffer
+	cmd.Stderr = &output
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal("download never started")
+	}
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err == nil {
+		t.Fatal("interrupt succeeded unexpectedly")
+	}
+	fields := strings.Fields(output.String())
+	if len(fields) < 2 || fields[0] != "Job:" {
+		t.Fatal(output.String())
+	}
+	id := fields[1]
+	if strings.Contains(output.String(), "private") {
+		t.Fatal("secret in output")
+	}
+	for _, args := range [][]string{{"status", id}, {"resume", "-quiet", id}, {"status", id}} {
+		args = append([]string{"--state-dir", state}, args...)
+		b, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v: %s", err, b)
+		}
+		if bytes.Contains(b, []byte("private")) {
+			t.Fatal("secret in diagnostics")
+		}
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil || sha256.Sum256(got) != sha256.Sum256(data) {
+		t.Fatal("incorrect resumed output", err)
+	}
 }

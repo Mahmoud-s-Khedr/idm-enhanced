@@ -1,8 +1,9 @@
 # IDM Enhanced
 
 A local Go download manager in development. M0 supplies the desktop shell, quality
-gates and browser ping. M1 adds a sequential CLI downloader; safe resume, queues,
-persistence, full desktop workflows, media and installers remain later milestones.
+gates and browser ping. M2 adds durable sequential CLI downloads and safe resume. Queues, full desktop
+workflows, media and installers remain later milestones. M2 hosted acceptance
+is pending; see [M2 evidence](docs/M2_EVIDENCE.md).
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -33,21 +34,38 @@ go run ./tools/quality check:full
 go run ./tools/quality gate-probes
 ```
 
-## Download a file (M1)
+## Durable CLI downloads (M2)
 
 ```sh
 go build -o build/downloader ./cmd/downloader
 ./build/downloader -o /path/to/new-file -sha256 EXPECTED_HEX https://example.com/file
+./build/downloader status
+./build/downloader resume -timeout 30m JOB_ID
+./build/downloader restart JOB_ID
+./build/downloader cancel --keep-partial JOB_ID
+./build/downloader cancel --discard-partial JOB_ID
 ```
 
-Omit `-sha256` when no trusted checksum is available. Options precede the URL.
-`-timeout 30m` bounds the entire transfer; `-quiet` hides progress. Unknown sizes
-show byte counts without a fabricated percentage. Ctrl+C cancels and removes the
-owned partial; SIGTERM is also handled. Existing destinations are never replaced.
-The destination directory must exist and its filesystem must support hard links.
-Failures remove partials and report errors; interrupted downloads cannot resume in
-M1. A signed URL is not printed in diagnostics, but command-line arguments may be
-visible to other local processes. See [M1 evidence](docs/M1_EVIDENCE.md).
+Every download persists a job and prints its ID before transferring. State defaults
+to `os.UserConfigDir()/idm-enhanced`; override it with `--state-dir DIR` before the
+command. Status is read-only and remains available during a transfer. Only one
+modifying command can own a state directory; use Ctrl+C to control a live transfer.
+
+Omit `-sha256` when no trusted checksum is available. Options precede the URL or job
+ID. `-timeout 30m` bounds a transfer; `-quiet` hides progress. Ctrl+C and SIGTERM
+checkpoint and pause, retaining the private partial. Ctrl+C exits 130; timeout
+exits 1. Resume requires the same effective URL, strong ETag and valid byte ranges.
+An unsafe resume preserves progress and enters `needs_attention`; `restart`
+explicitly discards owned progress and requests the original source again.
+Cancellation requires an explicit retention flag. Retained cancellations can be
+resumed; discarded cancellations require restart. Completed files are never deleted.
+
+Destinations must be new files in an existing trusted directory on a local
+filesystem supporting hard links and reliable locks. Source URLs remain only in
+the protected database; status and diagnostics omit them. Command-line arguments
+may be visible to local processes. There is no cookie/header persistence, automatic
+retry, legacy partial import, or power-loss resilience claim. Windows directory
+flush is currently unsupported. See [M2 evidence](docs/M2_EVIDENCE.md).
 
 ## Run the platform spike
 

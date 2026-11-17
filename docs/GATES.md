@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M1 complete (sequential CLI; M0 accepted). `check` runs active offline tasks; `check:full` adds the
+Current milestone: M2 implemented locally; hosted acceptance pending (M0 accepted). `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
@@ -19,9 +19,12 @@ fail. `doctor` diagnoses installations; it is not proof that platform tests pass
 | active             | browser-smoke: real extension/native-host/IPC round trips using disposable Linux browser profiles               | M0 acceptance, requires running native app and local browsers |
 | active             | Windows/macOS native CI build and framing tests (passed; see M0 evidence)                                       | M0 acceptance                                                 |
 | active             | M1 engine/CLI 80% package coverage, deterministic HTTP fixtures and CLI process tests                           | M1                                                            |
-| not applicable yet | engine 90% critical coverage, range/recovery fixtures                                                           | M2–M3 as logic arrives                                        |
+| active             | engine, manager, storage 90% package coverage; range/recovery/process-kill fixtures                             | M2                                                            |
 | not applicable yet | live Windows/macOS browser IPC and registration                                                                 | M5                                                            |
-| not applicable yet | installers, signing, media, SQLite migration checks                                                             | corresponding release milestones                              |
+| not applicable yet | installers, signing, media                                                                                      | corresponding release milestones                              |
+
+SQLite migration rollback/reopen/version/constraint tests are active in storage.
+Critical coverage and engine-to-storage dependency rejection have controlled probes.
 
 There are no broad production clone exceptions. Generated desktop bindings and
 protocol types, dependencies, build outputs and fixture/test files are excluded
