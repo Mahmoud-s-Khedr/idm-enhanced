@@ -98,7 +98,7 @@ var transitions = map[string]string{
 	"inspecting":      " downloading paused needs_attention failed cancelled",
 	"downloading":     " pausing verifying paused needs_attention failed cancelled",
 	"pausing":         " paused failed needs_attention",
-	"paused":          " inspecting queued cancelled needs_attention",
+	"paused":          " inspecting queued cancelled needs_attention verifying",
 	"needs_attention": " queued cancelled verifying",
 	"verifying":       " completed needs_attention failed paused",
 	"completed":       "",
@@ -131,8 +131,9 @@ func owned(j Job, flag int) (*os.File, error) {
 		return nil, err
 	}
 	identity, err := localfs.Identity(f)
-	if err != nil || identity != j.Identity {
-		return nil, errors.Join(errors.New("partial identity changed; explicit restart required"), err, f.Close())
+	ownershipErr := localfs.VerifyOwnership(f, j.Ownership)
+	if err != nil || identity != j.Identity || ownershipErr != nil {
+		return nil, errors.Join(errors.New("partial identity changed; explicit restart required"), err, ownershipErr, f.Close())
 	}
 	return f, nil
 }
@@ -153,7 +154,17 @@ func (m *Manager) allocate(ctx context.Context, j *Job) (*os.File, error) {
 		return nil, err
 	}
 	j.Partial = f.Name()
+	j.Ownership = rand.Text()
 	j.Identity, err = localfs.Identity(f)
+	if err == nil {
+		err = localfs.Protect(f.Name(), false)
+	}
+	if err == nil {
+		err = localfs.TagOwnership(f, j.Ownership)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
 	if err == nil {
 		err = localfs.SyncDir(filepath.Dir(j.Partial))
 	}
@@ -350,7 +361,7 @@ func (m *Manager) Run(ctx context.Context, id string, restart bool, progress fun
 			var rep engine.Representation
 			rep, err = engine.Stream(ctx, m.client, probe, io.Discard, nil, nil)
 			if err != nil {
-				return m.fail(&j, err, "remote_identity", true)
+				return m.fail(&j, err, "remote_identity", errors.Is(err, engine.ErrUnsafeResume))
 			}
 			j.Length = rep.Length
 			identity.Length = rep.Length
@@ -383,7 +394,7 @@ func (m *Manager) Run(ctx context.Context, id string, restart bool, progress fun
 		if !errors.Is(err, engine.ErrUnsafeResume) {
 			err = errors.Join(err, writer.checkpoint(cleanup))
 		}
-		return m.fail(&j, err, "transfer", errors.Is(err, engine.ErrUnsafeResume) || resumed)
+		return m.fail(&j, err, "transfer", errors.Is(err, engine.ErrUnsafeResume))
 	}
 	if err = writer.checkpoint(cleanup); err != nil {
 		return m.fail(&j, err, "checkpoint", false)
@@ -459,8 +470,9 @@ func verifyFile(ctx context.Context, path string, j Job) error {
 		return err
 	}
 	identity, e := localfs.Identity(f)
+	ownershipErr := localfs.VerifyOwnership(f, j.Ownership)
 	sum, se := digest(contextReader{ctx: ctx, reader: f})
-	err = errors.Join(e, se, f.Close())
+	err = errors.Join(e, ownershipErr, se, f.Close())
 	if err != nil {
 		return err
 	}
@@ -470,6 +482,12 @@ func verifyFile(ctx context.Context, path string, j Job) error {
 	return nil
 }
 func (m *Manager) publish(ctx context.Context, j *Job) error {
+	// Validate and persist the recovery transition before publishing any files.
+	if j.State != "verifying" {
+		if err := m.transition(ctx, j, "verifying"); err != nil {
+			return err
+		}
+	}
 	if _, err := os.Lstat(j.Destination); errors.Is(err, os.ErrNotExist) {
 		if err := verifyFile(ctx, j.Partial, *j); err != nil {
 			return err
@@ -513,12 +531,6 @@ func (m *Manager) publish(ctx context.Context, j *Job) error {
 		return err
 	}
 	j.Error = ""
-	// Recovery can finish verified records previously put into needs_attention.
-	if j.State != "verifying" {
-		if err := m.transition(ctx, j, "verifying"); err != nil {
-			return err
-		}
-	}
 	if err := m.transition(ctx, j, "completed"); err != nil {
 		return err
 	}
@@ -557,6 +569,7 @@ func (m *Manager) reset(ctx context.Context, j *Job) error {
 	}
 	j.Partial = ""
 	j.Identity = ""
+	j.Ownership = ""
 	j.Effective = ""
 	j.ETag = ""
 	j.Encoding = ""
@@ -583,6 +596,7 @@ func (m *Manager) Cancel(ctx context.Context, id string, keep bool) error {
 		}
 		j.Partial = ""
 		j.Identity = ""
+		j.Ownership = ""
 		j.Durable = 0
 		j.Intervals = nil
 		j.Error = "discarded"

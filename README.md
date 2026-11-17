@@ -61,7 +61,8 @@ Cancellation requires an explicit retention flag. Retained cancellations can be
 resumed; discarded cancellations require restart. Completed files are never deleted.
 
 Destinations must be new files in an existing trusted directory on a local
-filesystem supporting hard links and reliable locks. Source URLs remain only in
+filesystem supporting hard links, reliable locks and persistent ownership metadata
+(extended attributes on Unix; named streams on Windows). Source URLs remain only in
 the protected database; status and diagnostics omit them. Command-line arguments
 may be visible to local processes. There is no cookie/header persistence, automatic
 retry, legacy partial import, or power-loss resilience claim. Windows directory

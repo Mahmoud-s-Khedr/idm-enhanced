@@ -29,6 +29,7 @@ func TestResumeValidation(t *testing.T) {
 		{"short", `"v1"`, "", "bytes 2-4/5", "ll", 206, -1, true},
 		{"long", `"v1"`, "", "bytes 2-4/5", "lloo", 206, -1, true},
 		{"bad length", `"v1"`, "", "bytes 2-4/5", "llo", 206, 4, true},
+		{"temporary server failure", `"v1"`, "", "", "", 503, 0, true},
 		{"416", `"v1"`, "", "bytes */5", "", 416, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

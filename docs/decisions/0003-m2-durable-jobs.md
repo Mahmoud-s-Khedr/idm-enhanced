@@ -67,7 +67,17 @@ uses fresh five-second contexts after transfer cancellation. Recovery and full-f
 verification use the command context, so large files are not limited by the pause
 cleanup deadline.
 
-Recovery verifies native identity and ordered interval digests, persists the
+A random allocation ownership token is attached to each private partial before
+its ownership record is committed, separately from its reusable native file ID.
+Linux/macOS store it in an inode extended attribute; Windows uses a private named
+data stream. Both survive hard-link publication. Ownership must match before any
+reconciliation, deletion or publication. Unsupported ownership metadata fails
+closed: extended attributes (Unix) or named streams (Windows) are required on the
+destination filesystem. Records lacking a token require explicit restart, which
+leaves unproven files untouched. Tokens remain attached to completed files.
+See [Windows file streams](https://learn.microsoft.com/en-us/windows/win32/fileio/file-streams).
+
+Recovery verifies allocation ownership, native identity and ordered interval digests, persists the
 longest valid prefix, then truncates uncertain bytes. Missing/replaced partials
 require restart. Restart abandons replaced files without deleting them. Unknown
 allocations are retained and allocation persistence failures are reported.
@@ -76,6 +86,10 @@ Resume requires a strong ETag and a validated bytes=0-0 If-Range probe, then an
 exact range from the proven prefix. Effective URL, validator, encoding, range and
 length must agree. A full 200 is never appended; 416 never proves completeness.
 Zero-byte resources use full GET validation. Unsafe cases enter needs_attention.
+Transport failures and incomplete bodies with validated range/identity headers
+remain eligible for another explicit resume; HTTP 5xx also permits another attempt.
+No automatic retry is introduced. Verified paused jobs persist their transition
+back to verifying before recovery performs publication side effects.
 
 Verification rereads the whole file for SHA-256, honors cancellation, syncs and
 closes the file, then commits identity, digest and length in the verified phase.

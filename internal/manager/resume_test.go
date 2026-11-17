@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/localfs"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -294,7 +296,7 @@ func TestManagerBoundaries(t *testing.T) {
 		_ = f.Close()
 		t.Fatal("adopted unowned")
 	}
-	if err := verifyFile(ctx, j.Partial, Job{Identity: j.Identity, Length: 6, Digest: "bad"}); err == nil {
+	if err := verifyFile(ctx, j.Partial, Job{Identity: j.Identity, Ownership: j.Ownership, Length: 6, Digest: "bad"}); err == nil {
 		t.Fatal("invalid publication")
 	}
 	if err := verifyFile(ctx, j.Partial+"missing", j); err == nil {
@@ -797,5 +799,151 @@ func TestInvalidPersistedDestination(t *testing.T) {
 	j.Destination = filepath.Join(t.TempDir(), "invalid\x00destination")
 	if _, err := m.allocate(context.Background(), &j); err == nil {
 		t.Fatal("accepted invalid persisted destination")
+	}
+}
+
+func TestReusedNativeIdentityDoesNotAuthorizeReplacement(t *testing.T) {
+	m, source := fixture(t)
+	j := partial(t, m, source)
+	ctx := context.Background()
+	if err := os.Remove(j.Partial); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(j.Partial, []byte("unrelated replacement"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Model an OS reusing the saved native identity. The allocation token must
+	// reject the replacement even when device/inode (or native file ID) matches.
+	replacement, err := os.Open(j.Partial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := localfs.TagOwnership(replacement, "unrelated allocation"); err != nil {
+		t.Fatal(err)
+	}
+	j.Identity, err = localfs.Identity(replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = replacement.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.store.Save(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.recover(); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Cancel(ctx, j.ID, false); err == nil {
+		t.Fatal("discard accepted replacement")
+	}
+	data, err := os.ReadFile(j.Partial)
+	if err != nil || string(data) != "unrelated replacement" {
+		t.Fatal("reconciliation/discard changed replacement", string(data), err)
+	}
+	if err = m.Run(ctx, j.ID, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(j.Partial)
+	if err != nil || string(data) != "unrelated replacement" {
+		t.Fatal("restart changed replacement", string(data), err)
+	}
+}
+func TestPausedVerifiedPublicationRecoversFirstTime(t *testing.T) {
+	m, source := fixture(t)
+	j := partial(t, m, source)
+	ctx := context.Background()
+	if err := os.WriteFile(j.Partial, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	j.State = "paused"
+	j.Phase = "verified"
+	j.Length = 5
+	j.Durable = 5
+	j.Digest = fmt.Sprintf("%x", sha256.Sum256([]byte("hello")))
+	j.Intervals = []storage.Interval{{Start: 0, End: 5, Digest: j.Digest}}
+	if err := m.store.Save(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recover(); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := m.store.Get(ctx, j.ID)
+	if err != nil || saved.State != "completed" {
+		t.Fatal("first recovery did not finish publication", saved.State, err)
+	}
+	if err = m.Run(ctx, j.ID, false, nil); err != nil {
+		t.Fatal("first resume failed", err)
+	}
+}
+
+type managerTransport func(*http.Request) (*http.Response, error)
+
+func (f managerTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func TestTransientProbeFailureCanResumeAgain(t *testing.T) {
+	m, source := fixture(t)
+	j := partial(t, m, source)
+	ctx := context.Background()
+	m.client = &http.Client{Transport: managerTransport(func(*http.Request) (*http.Response, error) { return nil, errors.New("temporary network failure") })}
+	if err := m.Run(ctx, j.ID, false, nil); err == nil {
+		t.Fatal("ignored transport failure")
+	}
+	saved, err := m.store.Get(ctx, j.ID)
+	if err != nil || saved.State != "failed" || saved.Durable != 2 {
+		t.Fatal("lost resumable progress", saved, err)
+	}
+	m.client = http.DefaultClient
+	if err = m.Run(ctx, j.ID, false, nil); err != nil {
+		t.Fatal("temporary probe failure required restart", err)
+	}
+}
+func TestShortValidatedResumeCanResumeAgain(t *testing.T) {
+	m, source := fixture(t)
+	j := partial(t, m, source)
+	ctx := context.Background()
+	var short atomic.Bool
+	short.Store(true)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		if r.Header.Get("Range") == "bytes=0-0" {
+			w.Header().Set("Content-Range", "bytes 0-0/5")
+			w.WriteHeader(206)
+			_, _ = io.WriteString(w, "h")
+			return
+		}
+		var offset int
+		if _, err := fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-", &offset); err != nil || offset < 2 || offset >= 5 {
+			t.Error("did not preserve resume offset")
+			w.WriteHeader(416)
+			return
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-4/5", offset))
+		w.Header().Set("Content-Length", fmt.Sprint(5-offset))
+		w.WriteHeader(206)
+		if short.Swap(false) {
+			_, _ = io.WriteString(w, "l")
+			return
+		}
+		_, _ = io.WriteString(w, "hello"[offset:])
+	}))
+	defer s.Close()
+	j.Source = s.URL
+	j.Effective = s.URL
+	if err := m.store.Save(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Run(ctx, j.ID, false, nil); err == nil {
+		t.Fatal("accepted incomplete response as completion")
+	}
+	saved, err := m.store.Get(ctx, j.ID)
+	if err != nil || saved.State != "failed" || saved.Durable != 3 {
+		t.Fatal("lost validated prefix", saved, err)
+	}
+	if err = m.Run(ctx, j.ID, false, nil); err != nil {
+		t.Fatal("short transport response required restart", err)
+	}
+	data, err := os.ReadFile(j.Destination)
+	if err != nil || string(data) != "hello" {
+		t.Fatal(string(data), err)
 	}
 }

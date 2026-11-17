@@ -1,8 +1,10 @@
 # M2: Persistent downloads and safe resume
 
-Updated: 2026-11-17. M2 accepted with local and hosted platform evidence.
-The successful hosted run below validates the implemented M2 code; subsequent
-PR heads must independently pass all required checks before merge.
+Updated: 2026-11-17. Local and hosted baseline validation are recorded below.
+Final review corrections are validated by the required checks on
+[PR #3](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/3/checks).
+M2 acceptance follows its protected merge; subsequent PR heads must independently
+pass all required checks before merge.
 
 The CLI persists all new downloads, prints job IDs, supports status, resume,
 restart and explicit cancellation retention, and pauses on interruption/timeout.
@@ -44,8 +46,8 @@ All commands below passed on Linux amd64 with the pinned toolchain:
 - `go test -tags=integration ./integration -run TestDownloader -count=1`
 - `git diff --check`
 
-Final local statement coverage: engine 94.9%, manager 90.2%, storage 90.1%,
-CLI 95.1%, localfs 86.5%. Existing thresholds elsewhere remain unchanged.
+Final local statement coverage: engine 95.1%, manager 90.8%, storage 90.1%,
+CLI 95.1%, localfs 87.5%. Existing thresholds elsewhere remain unchanged.
 The ordinary suite runs the real process-crash tests; the race suite also passes.
 
 `go test ./internal/manager -run '^$' -bench BenchmarkChecksum -benchmem -benchtime=3x`
@@ -88,9 +90,28 @@ this run establishes behavior on that runner, not compatibility with older macOS
 The protected branch requires an up-to-date **Required checks** result. Every later
 PR head, including documentation-only updates, must pass independently.
 
+## Review regression evidence
+
+Final PR checks also run regressions for native-ID reuse: a replacement whose
+native ID matches the persisted value still fails allocation-token verification
+and is neither truncated nor deleted. The ownership token is created and synced
+before its record is saved, and survives hard-link publication. Tests cover absent,
+changed and duplicate ownership evidence on all native platforms.
+
+Transient probe failures and truncated bodies with valid range headers retain
+proven progress and permit another explicit resume. Invalid identity/range headers
+still require restart. A paused verified job completes publication on its first
+recovery invocation, with the legal transition persisted before file side effects.
+
+The linked hosted run is the pre-review baseline; final validation of these
+corrections and acceptance are shown by PR #3's final required checks and merge.
+
 ## Remaining limits
 
-Supported filesystems are local, with reliable locks and hard links. Windows
+Supported filesystems are local, with reliable locks and hard links, plus inode
+extended attributes on Linux/macOS or named data streams on Windows for allocation
+ownership. Missing ownership evidence fails closed; restart preserves unproven files.
+Windows
 directory durability is unsupported; neither Unix directory fsync nor process-kill
 tests establish power-loss resilience. Desktop jobs, queues, automatic retries,
 replacement URLs, request credentials and legacy M1 partial import remain deferred.

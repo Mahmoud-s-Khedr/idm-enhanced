@@ -26,7 +26,7 @@ type Interval struct {
 type Job struct {
 	Version                                                      int
 	ID, Destination, Source, Effective, ETag, Encoding, Checksum string
-	Partial, Identity, State, Phase, Error                       string
+	Partial, Identity, Ownership, State, Phase, Error            string
 	Length, Durable, Generation                                  int64
 	Intervals                                                    []Interval
 	Digest                                                       string

@@ -120,6 +120,9 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 		return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
 	}
 	if encoding := resp.Header.Get("Content-Encoding"); len(resp.Header.Values("Content-Encoding")) > 1 || (encoding != "" && encoding != "identity") {
+		if request.Resume {
+			return representation, ErrUnsafeResume
+		}
 		return representation, errors.New("unsupported response encoding")
 	}
 	representation = Representation{ETag: resp.Header.Get("ETag"), Encoding: resp.Header.Get("Content-Encoding"), Length: resp.ContentLength, Effective: source}
@@ -131,6 +134,9 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 	}
 	expected := resp.ContentLength
 	if request.Resume {
+		if resp.StatusCode >= 500 {
+			return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
+		}
 		start, end, total, ok := contentRange(resp.Header.Get("Content-Range"))
 		wantStart := request.Offset
 		if request.Probe {

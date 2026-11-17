@@ -2,13 +2,14 @@
 
 ## Current stage and references
 
-M0–M2 are accepted with recorded platform evidence. Read `docs/M2_EVIDENCE.md`
+M0–M2 have recorded platform evidence. Read `docs/M2_EVIDENCE.md`
 for persistent download/resume acceptance and limitations. M3 parallel engine/manager
 is next; `docs/M1_EVIDENCE.md` remains the historical sequential CLI evidence.
 Read `PROJECT_PLAN.md` for scope and `docs/QUALITY_POLICY.md` for engineering standards.
 Canonical tooling is implemented at `tools/quality`; run `doctor`, `check`, and `check:full`.
 Read `docs/GATES.md` and `docs/M0_EVIDENCE.md` for activation status and actual platform evidence.
-Keep M3 work within its plan and preserve the accepted M2 recovery invariants.
+Begin M3 only after the protected merge of M2 PR #3; keep its scope within the
+plan and preserve the M2 recovery invariants.
 
 ## Before changing code
 
