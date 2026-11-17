@@ -180,3 +180,41 @@ func TestTransferRejectsUnsafeRedirect(t *testing.T) {
 		})
 	}
 }
+
+func TestTransferRedirectDoesNotForwardSignedReferrer(t *testing.T) {
+	referrers := make(chan string, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		referrers <- r.Header.Get("Referer")
+		_, _ = io.WriteString(w, "download")
+	}))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/file", http.StatusFound)
+	}))
+	defer source.Close()
+	if err := Transfer(context.Background(), source.Client(), source.URL+"/file?token=secret", io.Discard, nil); err != nil {
+		t.Fatal(err)
+	}
+	if referrer := <-referrers; referrer != "" {
+		t.Fatalf("forwarded sensitive referrer: %q", referrer)
+	}
+}
+
+func TestTransferRejectsDowngradeAfterUpgrade(t *testing.T) {
+	requests := 0
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		location := "https://example.invalid/secure"
+		if r.URL.Scheme == "https" {
+			location = "http://example.invalid/file?token=secret"
+		}
+		if requests > 2 {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("unsafe")), ContentLength: 6, Header: make(http.Header)}, nil
+		}
+		return &http.Response{StatusCode: 302, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{"Location": []string{location}}}, nil
+	})}
+	err := Transfer(context.Background(), client, "http://example.invalid/start", io.Discard, nil)
+	if err == nil || requests != 2 || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("downgrade: requests=%d error=%v", requests, err)
+	}
+}

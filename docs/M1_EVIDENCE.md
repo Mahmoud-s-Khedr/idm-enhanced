@@ -9,6 +9,8 @@ The engine remains independent of desktop/browser code; `internal/cli` only pars
 arguments, presents progress/errors, and maps exit codes. No dependencies added.
 
 - GET without requiring HEAD; known and unknown sizes, bounded redirects.
+  Generated referrers are omitted, and every HTTPS-to-HTTP redirect hop is
+  rejected, including after an initial HTTP-to-HTTPS upgrade.
 - A fixed 32 KiB transfer buffer; no full-response buffering or parallel workers.
 - Identity encoding, HTTP status and body-length checks, context cancellation,
   whole-transfer timeout (30 minutes by default), and throttled progress.
@@ -33,7 +35,7 @@ after publication reports an error even though the verified destination exists.
 
 Fixtures run locally; mandatory tests never contact public services.
 
-- `go test -cover ./internal/engine ./internal/cli`: passed; engine 92.1%, CLI 100%.
+- `go test -cover ./internal/engine ./internal/cli`: passed; engine 92.2%, CLI 100%.
 - `go test -tags=integration ./integration -run TestDownloaderProcess -count=1`:
   passed; real executable downloads/checksums a fixture and responds to SIGINT
   with exit 130 and no partial/output left behind.
@@ -49,7 +51,7 @@ Fixtures run locally; mandatory tests never contact public services.
 
 - `go run ./tools/quality doctor`: passed.
 - `go run ./tools/quality check`: passed.
-- `go run ./tools/quality check:full`: passed, including the final 92.1% engine
+- `go run ./tools/quality check:full`: passed, including the final 92.2% engine
   coverage, 100% CLI coverage, race suite, both CLI/native-host process suites,
   Gitleaks, govulncheck and pnpm audit. Both vulnerability scanners reported no
   known vulnerabilities at execution time.
@@ -62,12 +64,13 @@ Fixtures run locally; mandatory tests never contact public services.
   package between probes.
 - `git diff --check`: passed.
 
-The [M1 hosted run](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44072292602)
-passed native build, ordinary tests and integration jobs on Linux amd64, Windows
-amd64 and macOS arm64. Hosted `check:full` and history-secret scanning also passed;
-the run exposed a gate-probe cleanup bug, now fixed and validated locally with the
-complete probe suite. [PR #2](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/2)
-requires a fully successful check of its updated head before merge.
+The [M1 hosted run](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44073354322)
+passed all quality checks/probes, the required aggregate, and native build,
+ordinary tests and integration jobs on Linux amd64, Windows amd64 and macOS arm64.
+Subsequent redirect-scoping fixes passed all canonical checks/probes locally and
+add regression tests for signed-URL referrer disclosure and HTTP-to-HTTPS-to-HTTP
+downgrades. [PR #2](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/2) requires
+a fully successful check of its updated head before merge.
 
 Windows explicitly skips process SIGINT because Go cannot send os.Interrupt
 there; context cancellation is tested normally. Interactive Windows/macOS use and

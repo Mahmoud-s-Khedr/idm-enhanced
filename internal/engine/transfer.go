@@ -43,13 +43,16 @@ func Transfer(ctx context.Context, client *http.Client, source string, dst io.Wr
 	// Copy configuration so redirect policy is enforced without mutating callers.
 	bounded := *client
 	bounded.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		// net/http generates Referer before this callback, including signed
+		// queries. Downloads never forward it, even to the same origin.
+		defer req.Header.Del("Referer")
 		if len(via) >= 10 {
 			return errors.New("redirect limit reached")
 		}
 		if !validURL(req.URL) {
 			return errors.New("invalid redirect URL")
 		}
-		if via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		if via[len(via)-1].URL.Scheme == "https" && req.URL.Scheme != "https" {
 			return errors.New("insecure redirect")
 		}
 		if client.CheckRedirect != nil {
