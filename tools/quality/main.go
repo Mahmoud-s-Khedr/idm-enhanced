@@ -152,11 +152,13 @@ func pnpm(args ...string) error {
 		return command(filepath.Join(root, "node_modules", ".bin", args[1]+ext), args[2:]...)
 	}
 
-	name := "pnpm"
+	return command(pnpmExecutable(), args...)
+}
+func pnpmExecutable() string {
 	if runtime.GOOS == "windows" {
-		name = "pnpm.cmd"
+		return "pnpm.cmd"
 	}
-	return command(name, args...)
+	return "pnpm"
 }
 func task(n string) error {
 	switch n {
@@ -230,7 +232,7 @@ func task(n string) error {
 		if err := command(binary("govulncheck"), "./..."); err != nil {
 			return err
 		}
-		return pnpm("audit", "--audit-level=high")
+		return javascriptAudit()
 	case "staged":
 		return staged()
 	case "browser-smoke":
@@ -276,7 +278,7 @@ func checkVersions() error {
 		name string
 		args []string
 		want string
-	}{{"go", []string{"version"}, "go" + pins.Go}, {"node", []string{"--version"}, "v" + pins.Node}, {"pnpm", []string{"--version"}, pins.PNPM}}
+	}{{"go", []string{"version"}, "go" + pins.Go}, {"node", []string{"--version"}, "v" + pins.Node}, {pnpmExecutable(), []string{"--version"}, pins.PNPM}}
 	for _, c := range checks {
 		b, e := output(c.name, c.args...)
 		if e != nil {

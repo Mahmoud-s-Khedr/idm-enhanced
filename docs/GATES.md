@@ -47,3 +47,8 @@ unsupported-platform IPC stubs, so their live-IPC coverage suite is explicitly n
 applicable until M5. The runner reports this platform skip; it still requires
 protocol coverage and the native-host subprocess framing/error tests. This follows
 the approved platform scope, and does not exempt any Linux IPC code from 80%.
+
+The dependency gate retains high/critical enforcement and has one expiring,
+version- and development-scope-specific applicability review for
+[GHSA-fc5q-39xc-vjpf](security/GHSA-fc5q-39xc-vjpf.md). Raw audit findings remain
+visible; expired, changed-scope and unrelated high/critical findings fail.

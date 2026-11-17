@@ -138,8 +138,26 @@ func probes() error {
 		if p.name == "unused-dependency" {
 			data = bytes.Replace(old, []byte(`"devDependencies": {`), []byte(`"devDependencies": {"unused-probe": "1.0.0",`), 1)
 		}
+		suiteFiles := map[string][]byte{}
 		if p.name == "empty-suite" {
 			data = []byte("package main\n")
+			files, err := filepath.Glob(filepath.Join(filepath.Dir(path), "*_test.go"))
+			if err != nil {
+				return err
+			}
+			for _, file := range files {
+				if file == path {
+					continue
+				}
+				original, err := os.ReadFile(file)
+				if err != nil {
+					return err
+				}
+				suiteFiles[file] = original
+				if err = os.WriteFile(file, data, 0644); err != nil {
+					return err
+				}
+			}
 		}
 		if p.name == "secret" {
 			data = []byte("synthetic_test_token = " + "ghp_" + "q8R3yN7mV2xP9kL5sT4wB6cF1dH0jZ8uA3eC\n")
@@ -148,6 +166,11 @@ func probes() error {
 			return e
 		}
 		b, probeErr := run("task", p.task)
+		for file, original := range suiteFiles {
+			if err := os.WriteFile(file, original, 0644); err != nil {
+				return err
+			}
+		}
 		if readErr == nil {
 			e = os.WriteFile(path, old, 0644)
 		} else {
