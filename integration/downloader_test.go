@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -128,8 +129,8 @@ func TestDownloaderResumeProcess(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "result")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, "--state-dir", state, "-quiet", "-o", dest, server.URL+"?token=private")
-	var output bytes.Buffer
+	cmd := exec.CommandContext(ctx, name, "--state-dir", state, "-o", dest, server.URL+"?token=private")
+	output := progressCapture{ready: make(chan struct{})}
 	cmd.Stderr = &output
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -140,6 +141,15 @@ func TestDownloaderResumeProcess(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		t.Fatal("download never started")
+	}
+	// Wait for client-observed progress, rather than only the server's write.
+	// Otherwise cancellation can precede receipt of the resume validator.
+	select {
+	case <-output.ready:
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal("client did not observe response metadata")
 	}
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		_ = cmd.Process.Kill()
@@ -178,3 +188,20 @@ func TestDownloaderResumeProcess(t *testing.T) {
 		t.Fatal("incorrect resumed output", err)
 	}
 }
+
+// exec.Wait joins the output copier before tests inspect Buffer.
+type progressCapture struct {
+	buffer bytes.Buffer
+	ready  chan struct{}
+	once   sync.Once
+}
+
+func (c *progressCapture) Write(p []byte) (int, error) {
+	n, err := c.buffer.Write(p)
+	if bytes.Contains(c.buffer.Bytes(), []byte("Progress:")) {
+		c.once.Do(func() { close(c.ready) })
+	}
+	return n, err
+}
+
+func (c *progressCapture) String() string { return c.buffer.String() }
