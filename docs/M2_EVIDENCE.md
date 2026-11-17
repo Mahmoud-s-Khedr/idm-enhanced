@@ -1,7 +1,8 @@
 # M2: Persistent downloads and safe resume
 
-Updated: 2026-11-17. Implementation and local validation complete.
-Hosted M2 acceptance is pending. M0/M1 run links do not establish M2 compatibility.
+Updated: 2026-11-17. M2 accepted with local and hosted platform evidence.
+The successful hosted run below validates the implemented M2 code; subsequent
+PR heads must independently pass all required checks before merge.
 
 The CLI persists all new downloads, prints job IDs, supports status, resume,
 restart and explicit cancellation retention, and pauses on interruption/timeout.
@@ -59,13 +60,35 @@ and `env GOOS=darwin GOARCH=arm64 go build -o /tmp/idm-m2-macos ./cmd/downloader
 passed. These are cross-compilation results only. Windows database URI paths
 include the required leading slash before the drive letter.
 
-## Acceptance limits
+## Hosted acceptance
 
-Hosted Linux/Windows/macOS native build, test and recovery results and the protected
-aggregate for this change are required before M2 is accepted. No such M2 hosted run
-has been executed in this workspace. Existing CI executes ordinary tests (including
-process-kill recovery) on all three native platforms and CLI integration tests.
-Cross-compilation alone is not native runtime evidence.
+[Hosted run 44082279209](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44082279209)
+passed at code head `837225a784aad80854c53c5dfc94964b1b51a152`, including
+quality, all three native jobs and the protected **Required checks** aggregate.
+The quality job passed full checks, the history secret scan and all 20 gate probes.
+Hosted critical coverage was engine 94.9%, manager 90.2%, storage 90.1%.
+Go 1.27.4, Node 26.13.1, pnpm 12.21.0 and Wails 3.0.0 remained pinned.
+
+| Native runner | Actual target | Native evidence                                                                                                            |
+| ------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ubuntu-24.04  | linux/amd64   | Build, ordinary tests including process-kill recovery, CLI/native-host integration passed                                  |
+| windows-2025  | windows/amd64 | Build, ordinary tests including process-kill recovery, native-host integration passed; CLI SIGINT tests explicitly skipped |
+| macos-15      | darwin/arm64  | Build, ordinary tests including process-kill recovery, CLI/native-host integration passed                                  |
+
+Windows cannot send os.Interrupt through Go. Its manager context cancellation,
+retention and eight real process-kill/relaunch recovery boundaries passed; this is
+not a skip of Windows recovery. The Windows native tests also verify current-user
+ownership normalization for elevated tokens and reject public ACLs. macOS tests
+verify its relative system temporary-directory aliases. The CLI interruption
+fixture waits for client-observed metadata before signalling and gives each
+independent command its own bounded deadline.
+
+The macOS runner reported 15.8.2 (24H232). Linker deployment-target warnings remain;
+this run establishes behavior on that runner, not compatibility with older macOS.
+The protected branch requires an up-to-date **Required checks** result. Every later
+PR head, including documentation-only updates, must pass independently.
+
+## Remaining limits
 
 Supported filesystems are local, with reliable locks and hard links. Windows
 directory durability is unsupported; neither Unix directory fsync nor process-kill

@@ -2,7 +2,7 @@
 
 Date: 2026-11-17
 
-Status: Implemented locally; hosted M2 acceptance pending
+Status: Implemented; M2 accepted with local and hosted evidence (M2_EVIDENCE.md)
 
 ## Ownership and storage
 

@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M2 implemented locally; hosted acceptance pending (M0 accepted). `check` runs active offline tasks; `check:full` adds the
+Current milestone: M2 accepted with hosted evidence in M2_EVIDENCE.md; M3 is next. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 

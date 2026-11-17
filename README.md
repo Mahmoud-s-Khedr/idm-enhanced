@@ -2,8 +2,8 @@
 
 A local Go download manager in development. M0 supplies the desktop shell, quality
 gates and browser ping. M2 adds durable sequential CLI downloads and safe resume. Queues, full desktop
-workflows, media and installers remain later milestones. M2 hosted acceptance
-is pending; see [M2 evidence](docs/M2_EVIDENCE.md).
+workflows, media and installers remain later milestones. M2 has passed hosted
+platform acceptance; see [M2 evidence](docs/M2_EVIDENCE.md).
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
