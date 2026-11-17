@@ -191,7 +191,9 @@ func probes() error {
 			return e
 		}
 		b, err := run("task", "lint-go")
-		if e = os.RemoveAll(filepath.Dir(path)); e != nil {
+		// Remove only the injected fixture; the engine now contains real M1
+		// code imported by the CLI and must survive the next probe.
+		if e = os.Remove(path); e != nil {
 			return e
 		}
 		if err == nil || !bytes.Contains(b, []byte(map[string]string{"boundary": "depguard", "clone": "dupl"}[mode])) {

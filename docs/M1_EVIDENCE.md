@@ -57,10 +57,20 @@ Fixtures run locally; mandatory tests never contact public services.
   passed (cross-compilation only).
 - `env GOOS=darwin GOARCH=arm64 go build -o /tmp/idm-m1-macos ./cmd/downloader`:
   passed (cross-compilation only).
+- `go run ./tools/quality gate-probes`: passed all 18 controlled rejection checks.
+  Go probe cleanup removes only its injected file, preserving the real engine
+  package between probes.
 - `git diff --check`: passed.
 
-No new hosted CI or Windows/macOS execution is claimed for M1; native CI already
-builds all commands and runs ordinary and integration tests. Windows explicitly skips process SIGINT
-because Go cannot send os.Interrupt there; context cancellation is tested normally.
+The [M1 hosted run](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44072292602)
+passed native build, ordinary tests and integration jobs on Linux amd64, Windows
+amd64 and macOS arm64. Hosted `check:full` and history-secret scanning also passed;
+the run exposed a gate-probe cleanup bug, now fixed and validated locally with the
+complete probe suite. [PR #2](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/2)
+requires a fully successful check of its updated head before merge.
+
+Windows explicitly skips process SIGINT because Go cannot send os.Interrupt
+there; context cancellation is tested normally. Interactive Windows/macOS use and
+power-loss resilience remain unverified.
 
 The M2 checkpoint protocol is specified in [ADR 0002](decisions/0002-m1-transfer-and-m2-checkpoints.md).
