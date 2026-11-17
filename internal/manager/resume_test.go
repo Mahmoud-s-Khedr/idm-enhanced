@@ -602,7 +602,7 @@ func TestInvalidParentAndRestart(t *testing.T) {
 		t.Fatal("accepted non-directory parent")
 	}
 	j := partial(t, m, source)
-	j.Partial = filepath.Join(file, "child")
+	j.Partial = filepath.Join(file, "invalid\x00partial")
 	if err := m.store.Save(ctx, j); err != nil {
 		t.Fatal(err)
 	}
@@ -789,5 +789,13 @@ func TestCancelledStartupReleasesOwnership(t *testing.T) {
 	}
 	if err = m.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+func TestInvalidPersistedDestination(t *testing.T) {
+	m, source := fixture(t)
+	j := partial(t, m, source)
+	j.Destination = filepath.Join(t.TempDir(), "invalid\x00destination")
+	if _, err := m.allocate(context.Background(), &j); err == nil {
+		t.Fatal("accepted invalid persisted destination")
 	}
 }

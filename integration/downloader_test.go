@@ -146,8 +146,10 @@ func TestDownloaderResumeProcess(t *testing.T) {
 		_ = cmd.Wait()
 		t.Fatal(err)
 	}
-	if err := cmd.Wait(); err == nil {
-		t.Fatal("interrupt succeeded unexpectedly")
+	err := cmd.Wait()
+	exit, ok := err.(*exec.ExitError)
+	if !ok || exit.ExitCode() != 130 {
+		t.Fatalf("pause: %v: %s", err, &output)
 	}
 	fields := strings.Fields(output.String())
 	if len(fields) < 2 || fields[0] != "Job:" {
@@ -159,9 +161,13 @@ func TestDownloaderResumeProcess(t *testing.T) {
 	}
 	for _, args := range [][]string{{"status", id}, {"resume", "-quiet", id}, {"status", id}} {
 		args = append([]string{"--state-dir", state}, args...)
-		b, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+		// Each independently launched command gets its own deadline. macOS
+		// executable validation/startup must not consume later commands' budgets.
+		commandCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		b, err := exec.CommandContext(commandCtx, name, args...).CombinedOutput()
+		stop()
 		if err != nil {
-			t.Fatalf("%v: %s", err, b)
+			t.Fatalf("command %v: %v: %s", args, err, b)
 		}
 		if bytes.Contains(b, []byte("private")) {
 			t.Fatal("secret in diagnostics")

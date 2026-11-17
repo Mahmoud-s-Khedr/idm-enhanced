@@ -32,7 +32,13 @@ func Protect(path string, directory bool) error {
 		return err
 	}
 	if !owner.Equals(user.User.Sid) {
-		return errors.New("unsafe state owner")
+		inheritedOwner, err := tokenOwner(windows.GetCurrentProcessToken())
+		if err != nil {
+			return err
+		}
+		if !owner.Equals(inheritedOwner) {
+			return errors.New("unsafe state owner")
+		}
 	}
 	sd, err := windows.SecurityDescriptorFromString("D:P(A;OICI;FA;;;" + user.User.Sid.String() + ")")
 	if err != nil {
@@ -42,7 +48,7 @@ func Protect(path string, directory bool) error {
 	if err != nil {
 		return err
 	}
-	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, user.User.Sid, nil, acl, nil)
 }
 func Identity(f *os.File) (string, error) {
 	var info windows.ByHandleFileInformation
@@ -79,7 +85,13 @@ func CheckProtected(path string, directory bool) error {
 		return err
 	}
 	if !owner.Equals(user.User.Sid) {
-		return errors.New("unsafe state owner")
+		inheritedOwner, err := tokenOwner(windows.GetCurrentProcessToken())
+		if err != nil {
+			return err
+		}
+		if !owner.Equals(inheritedOwner) {
+			return errors.New("unsafe state owner")
+		}
 	}
 	acl, _, err := sd.DACL()
 	if err != nil {
@@ -97,4 +109,20 @@ func CheckProtected(path string, directory bool) error {
 		return errors.New("unsafe state ACL principal")
 	}
 	return nil
+}
+
+// TokenOwner can be an enabled owner group for elevated processes. Newly created
+// SQLite sidecars inherit a private DACL but may initially use this default owner.
+func tokenOwner(token windows.Token) (*windows.SID, error) {
+	var size uint32
+	err := windows.GetTokenInformation(token, windows.TokenOwner, nil, 0, &size)
+	if !errors.Is(err, windows.ERROR_INSUFFICIENT_BUFFER) {
+		return nil, err
+	}
+	buffer := make([]byte, size)
+	if err = windows.GetTokenInformation(token, windows.TokenOwner, &buffer[0], size, &size); err != nil {
+		return nil, err
+	}
+	owner := (*struct{ SID *windows.SID })(unsafe.Pointer(&buffer[0]))
+	return owner.SID.Copy()
 }

@@ -67,6 +67,10 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
+	parent, parentErr := os.Stat(filepath.Dir(dest))
+	if parentErr != nil || !parent.IsDir() {
+		return Job{}, errors.New("destination parent must be an existing directory")
+	}
 	if err := vacant(dest); err != nil {
 		return Job{}, err
 	}

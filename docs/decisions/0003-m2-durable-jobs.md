@@ -22,7 +22,9 @@ opens mode=ro and performs neither migrations nor manager recovery. A process-he
 flock or LockFileEx lock serializes modifying commands and releases on process death.
 Unix state paths are owned by the current UID and use 0700/0600. Windows uses a
 protected current-user DACL with inheritable access for newly created SQLite
-sidecars. Symlinks are rejected, except the known macOS /var and /tmp system aliases.
+sidecars. The token default owner is recognized for elevated Windows creation;
+protection explicitly assigns ownership to the current user. Read-only checks
+require a user-only DACL, including on newly created sidecars. Symlinks are rejected, except the known macOS /var and /tmp system aliases.
 The destination's parent remains a trusted, existing directory as in M1.
 
 Signed URLs are stored only in this protected database; no headers or cookies are
