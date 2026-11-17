@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M0. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M1 complete (sequential CLI; M0 accepted). `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
@@ -18,7 +18,8 @@ fail. `doctor` diagnoses installations; it is not proof that platform tests pass
 | active             | gate-probes in a disposable copy, with a clean baseline for each gate                                           | M0 CI                                                         |
 | active             | browser-smoke: real extension/native-host/IPC round trips using disposable Linux browser profiles               | M0 acceptance, requires running native app and local browsers |
 | active             | Windows/macOS native CI build and framing tests (passed; see M0 evidence)                                       | M0 acceptance                                                 |
-| not applicable yet | engine 90% critical coverage, HTTP/range/recovery fixtures                                                      | M1–M3 as logic arrives                                        |
+| active             | M1 engine/CLI 80% package coverage, deterministic HTTP fixtures and CLI process tests                           | M1                                                            |
+| not applicable yet | engine 90% critical coverage, range/recovery fixtures                                                           | M2–M3 as logic arrives                                        |
 | not applicable yet | live Windows/macOS browser IPC and registration                                                                 | M5                                                            |
 | not applicable yet | installers, signing, media, SQLite migration checks                                                             | corresponding release milestones                              |
 
