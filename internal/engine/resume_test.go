@@ -29,6 +29,7 @@ func TestResumeValidation(t *testing.T) {
 		{"short", `"v1"`, "", "bytes 2-4/5", "ll", 206, -1, true},
 		{"long", `"v1"`, "", "bytes 2-4/5", "lloo", 206, -1, true},
 		{"bad length", `"v1"`, "", "bytes 2-4/5", "llo", 206, 4, true},
+		{"temporary encoded server failure", `"v1"`, "gzip", "", "", 503, 0, true},
 		{"temporary server failure", `"v1"`, "", "", "", 503, 0, true},
 		{"416", `"v1"`, "", "bytes */5", "", 416, 0, true},
 	} {
@@ -41,6 +42,9 @@ func TestResumeValidation(t *testing.T) {
 			})}
 			var out bytes.Buffer
 			_, err := Stream(context.Background(), client, Request{Source: "https://example.invalid", Resume: true, Offset: 2, Identity: Representation{Effective: "https://example.invalid", ETag: `"v1"`, Length: 5}}, &out, nil, nil)
+			if tc.status >= 500 && errors.Is(err, ErrUnsafeResume) {
+				t.Fatalf("temporary server error required restart: %v", err)
+			}
 			if (err != nil) != tc.unsafe {
 				t.Fatalf("got %v", err)
 			}

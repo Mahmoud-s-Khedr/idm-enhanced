@@ -881,22 +881,32 @@ type managerTransport func(*http.Request) (*http.Response, error)
 
 func (f managerTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestTransientProbeFailureCanResumeAgain(t *testing.T) {
-	m, source := fixture(t)
-	j := partial(t, m, source)
-	ctx := context.Background()
-	m.client = &http.Client{Transport: managerTransport(func(*http.Request) (*http.Response, error) { return nil, errors.New("temporary network failure") })}
-	if err := m.Run(ctx, j.ID, false, nil); err == nil {
-		t.Fatal("ignored transport failure")
-	}
-	saved, err := m.store.Get(ctx, j.ID)
-	if err != nil || saved.State != "failed" || saved.Durable != 2 {
-		t.Fatal("lost resumable progress", saved, err)
-	}
-	m.client = http.DefaultClient
-	if err = m.Run(ctx, j.ID, false, nil); err != nil {
-		t.Fatal("temporary probe failure required restart", err)
+	for _, encoded := range []bool{false, true} {
+		t.Run(fmt.Sprint(encoded), func(t *testing.T) {
+			m, source := fixture(t)
+			j := partial(t, m, source)
+			ctx := context.Background()
+			m.client = &http.Client{Transport: managerTransport(func(*http.Request) (*http.Response, error) {
+				if encoded {
+					return &http.Response{StatusCode: 503, Header: http.Header{"Content-Encoding": {"gzip"}}, Body: io.NopCloser(strings.NewReader("temporary error page")), ContentLength: -1}, nil
+				}
+				return nil, errors.New("temporary network failure")
+			})}
+			if err := m.Run(ctx, j.ID, false, nil); err == nil {
+				t.Fatal("ignored transport failure")
+			}
+			saved, err := m.store.Get(ctx, j.ID)
+			if err != nil || saved.State != "failed" || saved.Durable != 2 {
+				t.Fatal("lost resumable progress", saved, err)
+			}
+			m.client = http.DefaultClient
+			if err = m.Run(ctx, j.ID, false, nil); err != nil {
+				t.Fatal("temporary probe failure required restart", err)
+			}
+		})
 	}
 }
+
 func TestShortValidatedResumeCanResumeAgain(t *testing.T) {
 	m, source := fixture(t)
 	j := partial(t, m, source)

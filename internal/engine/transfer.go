@@ -119,6 +119,10 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 	if !request.Resume && resp.StatusCode != http.StatusOK {
 		return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
 	}
+	// Error-page encoding says nothing about the requested representation.
+	if request.Resume && resp.StatusCode >= 500 {
+		return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
+	}
 	if encoding := resp.Header.Get("Content-Encoding"); len(resp.Header.Values("Content-Encoding")) > 1 || (encoding != "" && encoding != "identity") {
 		if request.Resume {
 			return representation, ErrUnsafeResume
@@ -134,9 +138,6 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 	}
 	expected := resp.ContentLength
 	if request.Resume {
-		if resp.StatusCode >= 500 {
-			return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
-		}
 		start, end, total, ok := contentRange(resp.Header.Get("Content-Range"))
 		wantStart := request.Offset
 		if request.Probe {
