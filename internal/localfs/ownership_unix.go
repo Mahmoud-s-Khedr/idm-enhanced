@@ -19,7 +19,7 @@ func ownershipAttribute() string {
 // TagOwnership binds a fresh random allocation token to the inode, independently
 // of its reusable native ID. Filesystems without extended attributes fail closed.
 func TagOwnership(f *os.File, token string) error {
-	return unix.Fsetxattr(int(f.Fd()), ownershipAttribute(), []byte(token), unix.XATTR_CREATE)
+	return createOwnershipAttribute(f, token)
 }
 func VerifyOwnership(f *os.File, token string) error {
 	var buffer [64]byte

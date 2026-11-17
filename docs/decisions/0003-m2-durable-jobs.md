@@ -75,6 +75,10 @@ reconciliation, deletion or publication. Unsupported ownership metadata fails
 closed: extended attributes (Unix) or named streams (Windows) are required on the
 destination filesystem. Records lacking a token require explicit restart, which
 leaves unproven files untouched. Tokens remain attached to completed files.
+The pinned x/sys Darwin Fsetxattr wrapper ignores flags; its adapter checks the
+fresh, exclusively owned descriptor for an existing attribute before setting it.
+The manager's allocation ownership and modifier lock exclude a second writer;
+Linux uses the native atomic XATTR_CREATE option.
 See [Windows file streams](https://learn.microsoft.com/en-us/windows/win32/fileio/file-streams).
 
 Recovery verifies allocation ownership, native identity and ordered interval digests, persists the
