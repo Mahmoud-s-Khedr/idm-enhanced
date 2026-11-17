@@ -49,6 +49,9 @@ report, registry failure, or expired review fails closed. Regression fixtures te
 these boundaries, including an unrelated high finding alongside the reviewed one.
 Direct `pnpm audit` continues to report the advisory; this is a scoped applicability
 decision in the project's canonical gate, not a clean raw audit result.
+The JSON audit command can exit 1 for lower-severity findings too; the runner
+validates counts and details at every severity before applying the existing
+high/critical threshold. Low/moderate findings do not become scanner failures.
 
 Remove or reassess this exception when a patched release appears, the advisory is
 withdrawn, picomatch's version changes, or any new runtime/untrusted-pattern use is

@@ -129,7 +129,17 @@ func TestAuditFailsClosed(t *testing.T) {
 		t.Fatal(summary, err)
 	}
 	const lower = `{"advisories":{"x":{"module_name":"other","github_advisory_id":"GHSA-other","severity":"moderate"}},"metadata":{"vulnerabilities":{"moderate":1,"high":0,"critical":0}}}`
-	if _, err := assessAudit([]byte(lower), time.Now(), false); err != nil {
-		t.Fatal("changed high/critical threshold", err)
+	for _, scanFailed := range []bool{false, true} {
+		if _, err := assessAudit([]byte(lower), time.Now(), scanFailed); err != nil {
+			t.Fatal("changed high/critical threshold", err)
+		}
+	}
+	const missingLowerDetails = `{"advisories":{},"metadata":{"vulnerabilities":{"moderate":1,"high":0,"critical":0}}}`
+	if _, err := assessAudit([]byte(missingLowerDetails), time.Now(), true); err == nil {
+		t.Fatal("accepted missing lower-severity details")
+	}
+	const lowerWithScannerError = `{"advisories":{"x":{"module_name":"other","github_advisory_id":"GHSA-other","severity":"moderate"}},"metadata":{"vulnerabilities":{"moderate":1,"high":0,"critical":0}},"error":{"message":"registry failed"}}`
+	if _, err := assessAudit([]byte(lowerWithScannerError), time.Now(), true); err == nil {
+		t.Fatal("accepted scanner failure beside lower-severity finding")
 	}
 }

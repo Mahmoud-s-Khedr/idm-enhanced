@@ -70,7 +70,7 @@ func assessAudit(data []byte, now time.Time, scanFailed bool) (string, error) {
 	if counts.Info < 0 || counts.Low < 0 || counts.Moderate < 0 || *counts.High < 0 || *counts.Critical < 0 {
 		return "", errors.New("pnpm audit returned invalid vulnerability counts")
 	}
-	var high, critical int
+	seen := map[string]int{}
 	var blocked, reviewed []string
 	expiry, err := time.Parse(time.DateOnly, picomatchReviewExpires)
 	if err != nil {
@@ -79,11 +79,10 @@ func assessAudit(data []byte, now time.Time, scanFailed bool) (string, error) {
 	for _, advisory := range report.Advisories {
 		switch advisory.Severity {
 		case "info", "low", "moderate":
+			seen[advisory.Severity]++
 			continue
-		case "high":
-			high++
-		case "critical":
-			critical++
+		case "high", "critical":
+			seen[advisory.Severity]++
 		default:
 			return "", errors.New("pnpm audit returned an unknown severity")
 		}
@@ -113,11 +112,13 @@ func assessAudit(data []byte, now time.Time, scanFailed bool) (string, error) {
 			reviewed = append(reviewed, label)
 		}
 	}
-	if high != *counts.High || critical != *counts.Critical {
+	if seen["info"] != counts.Info || seen["low"] != counts.Low || seen["moderate"] != counts.Moderate || seen["high"] != *counts.High || seen["critical"] != *counts.Critical {
 		return "", errors.New("pnpm audit vulnerability counts disagree with advisory details")
 	}
-	if scanFailed && high+critical == 0 {
-		return "", errors.New("pnpm audit failed without high/critical advisory details")
+	// JSON mode reports all severities and exits 1 for any finding, even
+	// below --audit-level. Require complete details, then apply our threshold.
+	if scanFailed && len(report.Advisories) == 0 {
+		return "", errors.New("pnpm audit failed without advisory details")
 	}
 	if len(blocked) > 0 {
 		sort.Strings(blocked)
