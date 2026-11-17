@@ -2,7 +2,8 @@
 
 ## Current stage and references
 
-This repository is implementing M0: quality foundation, a minimal Wails shell, and a Linux browser ping spike.
+M0 is accepted with recorded platform evidence. M1 sequential CLI is complete;
+read `docs/M1_EVIDENCE.md` for its acceptance evidence and limitations.
 Read `PROJECT_PLAN.md` for scope and `docs/QUALITY_POLICY.md` for engineering standards.
 Canonical tooling is implemented at `tools/quality`; run `doctor`, `check`, and `check:full`.
 Read `docs/GATES.md` and `docs/M0_EVIDENCE.md` for activation status and actual platform evidence.

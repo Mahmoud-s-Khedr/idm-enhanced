@@ -1,8 +1,8 @@
 # IDM Enhanced
 
-A local Go download manager in development. M0 establishes a Wails desktop shell,
-repository quality gates and a browser-to-desktop ping. Downloading, queues,
-persistence, media processing and installers are later milestones.
+A local Go download manager in development. M0 supplies the desktop shell, quality
+gates and browser ping. M1 adds a sequential CLI downloader; safe resume, queues,
+persistence, full desktop workflows, media and installers remain later milestones.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -32,6 +32,22 @@ go run ./tools/quality check
 go run ./tools/quality check:full
 go run ./tools/quality gate-probes
 ```
+
+## Download a file (M1)
+
+```sh
+go build -o build/downloader ./cmd/downloader
+./build/downloader -o /path/to/new-file -sha256 EXPECTED_HEX https://example.com/file
+```
+
+Omit `-sha256` when no trusted checksum is available. Options precede the URL.
+`-timeout 30m` bounds the entire transfer; `-quiet` hides progress. Unknown sizes
+show byte counts without a fabricated percentage. Ctrl+C cancels and removes the
+owned partial; SIGTERM is also handled. Existing destinations are never replaced.
+The destination directory must exist and its filesystem must support hard links.
+Failures remove partials and report errors; interrupted downloads cannot resume in
+M1. A signed URL is not printed in diagnostics, but command-line arguments may be
+visible to other local processes. See [M1 evidence](docs/M1_EVIDENCE.md).
 
 ## Run the platform spike
 

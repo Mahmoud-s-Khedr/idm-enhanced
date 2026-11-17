@@ -1,16 +1,16 @@
 # Cross-platform download manager — project plan
 
-Status: Product plan accepted; M0 implementation under validation
+Status: M0 accepted; M1 complete with local validation; M2 safe resume is next
 
 Date: 2026-11-16
 
-Updated: 2026-11-17 — M0 implementation and platform evidence added
+Updated: 2026-11-17 — M1 sequential downloader and checkpoint design added
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 
 Target: Windows, macOS, and Linux desktop
 
-Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; later features remain planned.
+Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI; later features remain planned.
 
 ## 1. Project direction
 
