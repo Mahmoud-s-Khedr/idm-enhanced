@@ -1,10 +1,10 @@
 # Cross-platform download manager — project plan
 
-Status: M0 accepted; M1 complete with local validation; M2 safe resume is next
+Status: M0–M2 accepted with recorded evidence; M3 parallel engine/manager is next
 
 Date: 2026-11-16
 
-Updated: 2026-11-17 — M1 sequential downloader and checkpoint design added
+Updated: 2026-11-17 — M2 hosted acceptance recorded; see docs/M2_EVIDENCE.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 

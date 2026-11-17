@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -44,7 +45,7 @@ func TestRun(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dest := filepath.Join(t.TempDir(), "result")
-			args := append([]string{"-o", dest}, tc.flags...)
+			args := append([]string{"--state-dir", t.TempDir(), "-o", dest}, tc.flags...)
 			args = append(args, server.URL+tc.path+"?token=secret")
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -87,5 +88,62 @@ func TestRunUsage(t *testing.T) {
 		if code := Run(context.Background(), tc.args, &output); code != tc.code || !strings.Contains(output.String(), "Usage:") || strings.Contains(output.String(), "secret") {
 			t.Fatalf("usage: %d %s", code, &output)
 		}
+	}
+}
+func TestPersistentCommands(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "hello") }))
+	defer server.Close()
+	dir := t.TempDir()
+	dest := filepath.Join(t.TempDir(), "result")
+	ctx := context.Background()
+	run := func(args ...string) (int, string) {
+		var out bytes.Buffer
+		code := Run(ctx, append([]string{"--state-dir", dir}, args...), &out)
+		return code, out.String()
+	}
+	if code, out := run("-quiet", "-o", dest, server.URL); code != 0 {
+		t.Fatal(code, out)
+	}
+	code, out := run("status")
+	if code != 0 || !strings.Contains(out, "completed") {
+		t.Fatal(code, out)
+	}
+	id := strings.Fields(out)[0]
+	for _, args := range [][]string{{"status", id}, {"resume", id}, {"restart", id}, {"cancel", "--keep-partial", id}, {"cancel", "--discard-partial", id}} {
+		if code, out = run(args...); code != 0 {
+			t.Fatal(code, out)
+		}
+	}
+	for _, args := range [][]string{{"cancel", id}, {"cancel", "--keep-partial", "--discard-partial", id}, {"status", "missing"}, {"resume", "missing"}, {"status", "one", "two"}, {"resume"}} {
+		if code, _ = run(args...); code == 0 {
+			t.Fatal("accepted invalid command", args)
+		}
+	}
+	if code, _ = run("cancel", "--keep-partial", "missing"); code != 1 {
+		t.Fatal(code)
+	}
+	if code, _ = run("-sha256", "bad", "-o", filepath.Join(t.TempDir(), "file"), server.URL); code != 1 {
+		t.Fatal(code)
+	}
+	var missing bytes.Buffer
+	if code := Run(ctx, []string{"--state-dir", filepath.Join(t.TempDir(), "missing"), "status"}, &missing); code != 1 {
+		t.Fatal(code)
+	}
+	if code := Run(ctx, []string{"--state-dir"}, &missing); code != 2 {
+		t.Fatal(code)
+	}
+	// Status does not take the modifier lock.
+	m, err := manager.Open(dir, false, http.DefaultClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, out = run("status"); code != 0 {
+		t.Fatal(code, out)
+	}
+	if code, out = run("-o", filepath.Join(t.TempDir(), "file"), server.URL); code != 1 || !strings.Contains(out, "another modifying") {
+		t.Fatal(code, out)
+	}
+	if err = m.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

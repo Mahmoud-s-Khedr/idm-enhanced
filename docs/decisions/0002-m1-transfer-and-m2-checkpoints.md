@@ -2,7 +2,7 @@
 
 Date: 2026-11-17
 
-Status: M1 implemented; M2 protocol accepted as a design, not implemented
+Status: M1 implemented; M2 protocol implemented by ADR 0003 (hosted acceptance recorded in M2_EVIDENCE.md)
 
 ## Ownership and dependency decision
 

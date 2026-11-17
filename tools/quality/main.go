@@ -467,8 +467,14 @@ func coverage() error {
 		}
 		pct := 100 * float64(c.covered) / float64(c.total)
 		fmt.Printf("%s %.1f%%\n", p, pct)
-		if pct < 80 {
-			return fmt.Errorf("%s below 80%%", p)
+		minimum := 80
+		for _, critical := range []string{"/internal/engine", "/internal/manager", "/internal/storage"} {
+			if strings.HasSuffix(p, critical) {
+				minimum = 90
+			}
+		}
+		if pct < float64(minimum) {
+			return fmt.Errorf("%s below %d%%", p, minimum)
 		}
 	}
 	return nil
