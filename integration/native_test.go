@@ -96,9 +96,6 @@ func TestNativeHostDownloadHandoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(temporary) }()
-	t.Setenv("XDG_RUNTIME_DIR", temporary)
-	t.Setenv("HOME", temporary)
-	t.Setenv("USERPROFILE", temporary)
 	host := filepath.Join(temporary, "native-host")
 	if runtime.GOOS == "windows" {
 		host += ".exe"
@@ -106,6 +103,9 @@ func TestNativeHostDownloadHandoff(t *testing.T) {
 	if b, err := exec.Command("go", "build", "-o", host, "../cmd/native-host").CombinedOutput(); err != nil {
 		t.Fatal(string(b), err)
 	}
+	t.Setenv("XDG_RUNTIME_DIR", temporary)
+	t.Setenv("HOME", temporary)
+	t.Setenv("USERPROFILE", temporary)
 	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("M5 verified bytes")) }))
 	defer fixture.Close()
 	m, err := manager.Open(filepath.Join(temporary, "state"), false, nil)
