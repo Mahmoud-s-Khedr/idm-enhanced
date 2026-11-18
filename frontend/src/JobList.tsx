@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   JobView,
   Command,
@@ -18,6 +18,12 @@ export function JobList({
   control: (c: Partial<Command>) => Promise<void>;
 }) {
   const [cancelID, setCancelID] = useState('');
+  const cancelTrigger = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (cancelID) keepButton.current?.focus();
+    else cancelTrigger.current?.focus();
+  }, [cancelID]);
   const reorder = (id: string) => {
     const order = allJobs.filter((j) => j.state === 'queued').map((j) => j.id);
     void control({
@@ -45,8 +51,13 @@ export function JobList({
           </p>
           <progress
             aria-label={`Progress for ${j.name}`}
-            value={j.total > 0 ? j.bytes : undefined}
-            max={j.total > 0 ? j.total : undefined}
+            value={j.total >= 0 ? j.bytes : undefined}
+            max={j.total >= 0 ? Math.max(1, j.total) : undefined}
+            aria-valuetext={
+              j.total < 0
+                ? `${bytes(j.bytes)} downloaded; size unknown`
+                : `${bytes(j.bytes)} of ${bytes(j.total)}`
+            }
           />
           <p>
             {bytes(j.bytes)}
@@ -61,6 +72,7 @@ export function JobList({
           {j.error && (
             <p role="status">Attention: {j.error.replaceAll('_', ' ')}</p>
           )}
+          {j.guidance && <p className="hint">{j.guidance}</p>}
           <div className="actions">
             {j.state === 'completed' ? (
               <>
@@ -117,7 +129,15 @@ export function JobList({
                 >
                   Restart
                 </button>
-                <button disabled={running} onClick={() => setCancelID(j.id)}>
+                <button
+                  disabled={running}
+                  aria-expanded={cancelID === j.id}
+                  aria-controls={`retention-${j.id}`}
+                  onClick={(event) => {
+                    cancelTrigger.current = event.currentTarget;
+                    setCancelID(j.id);
+                  }}
+                >
                   Cancel…
                 </button>
                 {j.state === 'queued' && (
@@ -157,11 +177,20 @@ export function JobList({
           {cancelID === j.id && (
             <div
               className="retention"
+              id={`retention-${j.id}`}
               role="group"
               aria-label="Partial file retention"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation();
+                  setCancelID('');
+                }
+              }}
             >
               <p>Keep the partial file for a later resume, or discard it?</p>
               <button
+                ref={keepButton}
+                disabled={running}
                 onClick={() => {
                   void control({
                     action: 'cancel',
@@ -174,6 +203,7 @@ export function JobList({
                 Keep partial
               </button>
               <button
+                disabled={running}
                 onClick={() => {
                   void control({
                     action: 'cancel',

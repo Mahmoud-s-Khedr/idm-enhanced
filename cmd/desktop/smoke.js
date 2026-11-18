@@ -49,6 +49,19 @@
     );
     button('Add to queue').click();
     await wait(() => document.querySelector('article'));
+    button('Cancel…').click();
+    await wait(() => document.activeElement === button('Keep partial'));
+    button('Keep partial').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await wait(() => !button('Keep partial'));
+    if (document.activeElement !== button('Cancel…'))
+      throw new Error('Cancel dismissal lost keyboard focus');
+    document.documentElement.style.fontSize = '200%';
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (document.documentElement.scrollWidth > window.innerWidth)
+      throw new Error('Download controls overflow at 200% text size');
+    document.documentElement.style.fontSize = '';
     button('Run queue').click();
     await wait(() => document.querySelector('.badge.downloading'));
     button('Pause all').click();

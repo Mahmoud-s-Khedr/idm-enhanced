@@ -77,6 +77,9 @@ export function App() {
   );
   return (
     <main>
+      <a className="skip-link" href="#download-content">
+        Skip to download controls
+      </a>
       <header>
         <div>
           <p className="eyebrow">IDM Enhanced · desktop alpha</p>
@@ -148,7 +151,7 @@ export function App() {
             </button>
           </details>
         </aside>
-        <div>
+        <div id="download-content" tabIndex={-1}>
           {settings && snapshot ? (
             <SettingsForm
               settings={snapshot.settings}
@@ -165,7 +168,9 @@ export function App() {
               />
               <section aria-labelledby="list-title">
                 <div className="toolbar">
-                  <h2 id="list-title">{filter}</h2>
+                  <h2 id="list-title" tabIndex={-1}>
+                    {filter}
+                  </h2>
                   <button
                     className="primary"
                     disabled={!snapshot || snapshot.running || !!error}

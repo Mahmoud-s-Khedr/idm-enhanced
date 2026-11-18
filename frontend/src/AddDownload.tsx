@@ -72,10 +72,11 @@ export function AddDownload({ added }: { added: () => void }) {
             }}
           />
         </label>
-        <label>
-          Save as
+        <div>
+          <label htmlFor="download-destination">Save as</label>
           <span className="input-row">
             <input
+              id="download-destination"
               required
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
@@ -90,7 +91,7 @@ export function AddDownload({ added }: { added: () => void }) {
               Browse…
             </button>
           </span>
-        </label>
+        </div>
         <details>
           <summary>Schedule and verification</summary>
           <label>

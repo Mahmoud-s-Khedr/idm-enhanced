@@ -50,6 +50,35 @@ func desktopWait(t *testing.T, s *Service) Snapshot {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+func TestDesktopChecksumFailureExplainsSafeRecovery(t *testing.T) {
+	s := desktopFixture(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("untrusted output"))
+	}))
+	defer server.Close()
+	destination := filepath.Join(t.TempDir(), "output")
+	_, err := s.Add(DownloadRequest{URL: server.URL + "/file?token=private", Destination: destination, SHA256: strings.Repeat("0", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Control(Command{Action: "run-queue"}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := desktopWait(t, s)
+	j := snapshot.Jobs[0]
+	if j.State != "needs_attention" || j.Error != "checksum" || !strings.Contains(j.Guidance, "Restart") {
+		t.Fatalf("missing safe recovery advice: %+v", j)
+	}
+	if _, err = os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatal("checksum failure published output", err)
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil || strings.Contains(string(data), "private") || strings.Contains(string(data), "token=") {
+		t.Fatal("source metadata exposed in failed snapshot", err)
+	}
+}
+
 func TestDesktopDownloadWorkflow(t *testing.T) {
 	s := desktopFixture(t)
 	var opened string

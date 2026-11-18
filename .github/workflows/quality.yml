@@ -60,6 +60,8 @@ jobs:
         if: runner.os == 'Windows'
         run: choco upgrade innosetup --version=6.5.4 --allow-downgrade --yes --no-progress
       - if: runner.os == 'Windows'
+        run: go run ./tools/package -format windows -version 0.5.0 -out build/predecessor
+      - if: runner.os == 'Windows'
         run: go run ./tools/quality task package
       - if: runner.os == 'Windows'
         run: ./packaging/smoke-windows.ps1
@@ -108,6 +110,7 @@ jobs:
           run_install: false
       - run: go run ./tools/quality bootstrap-deps
       - run: go run ./tools/quality task build
+      - run: go run ./tools/package -format ${{ matrix.format }} -version 0.5.0 -out build/predecessor
       - run: go run ./tools/quality task package
         env:
           PACKAGE_FORMAT: ${{ matrix.format }}

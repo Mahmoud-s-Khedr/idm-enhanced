@@ -676,6 +676,32 @@ func Resumable(j Job) bool {
 // SafeError is the persisted category; diagnostic text never includes source URLs.
 func SafeError(j Job) string { return j.Error }
 
+// RecoveryHint gives adapters safe next steps without exposing source URLs or
+// treating an unsafe checkpoint as resumable. The manager remains authoritative.
+func RecoveryHint(j Job) string {
+	if j.State == "needs_attention" && j.Error == "transfer" {
+		return "The server response cannot safely resume this file. Check the source, then Restart to discard saved progress."
+	}
+	switch j.Error {
+	case "":
+		return ""
+	case "remote_identity", "checksum":
+		return "The source changed or could not be verified. Check the source and checksum, then Restart to discard saved progress."
+	case "local_identity", "publication_recovery":
+		return "Saved file ownership could not be verified. Preserve existing files; choose a new destination for a new download."
+	case "publication":
+		return "The file could not be published safely. Preserve existing files and check the destination before restarting."
+	case "discarded":
+		return "Saved progress was discarded. Use Restart to download again."
+	case "checkpoint", "verification", "sync":
+		return "Check free disk space and destination permissions, then Resume / retry. Saved bytes will be verified before reuse."
+	case "interrupted":
+		return "Download paused after interruption. Use Resume / retry when ready."
+	default:
+		return "Check the connection and source access, then Resume / retry. Browser session credentials are unsupported; use the browser for those downloads."
+	}
+}
+
 // step provides deterministic fault boundaries for recovery tests. It is unset in adapters.
 func (m *Manager) step(name string) error {
 	if m.boundary != nil {

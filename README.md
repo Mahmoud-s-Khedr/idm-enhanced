@@ -5,7 +5,7 @@ gates and browser ping. M2 adds durable CLI downloads and safe resume. M3 adds
 parallel ranges, queues, shared limits and bounded retries; acceptance is tracked in
 [M3 evidence](docs/M3_EVIDENCE.md). M4 adds desktop download management, history, persisted settings,
 one-time schedules and native lifecycle controls; see [M4 evidence](docs/M4_EVIDENCE.md).
-M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). Media remains later work. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
+M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). M6 hardening adds accessible cancellation/progress, recovery guidance and upgrade checks; see [M6 evidence](docs/M6_EVIDENCE.md) and the [support/update guide](docs/SUPPORT.md). Human beta feedback remains pending. Media remains later work. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -150,8 +150,8 @@ CI's **Quality** workflow uploads 30-day artifacts for every PR and main build:
 Each includes Firefox unsigned `.xpi`, Chrome `.zip` and `SHA256SUMS`. Download
 from the successful Actions run's Artifacts section and verify checksums. These
 are unsigned alpha packages, without store publication or signing. Install Linux
-with `sudo apt install ./idm-enhanced_0.5.0_amd64.deb` or
-`sudo dnf install ./idm-enhanced-0.5.0-1.x86_64.rpm`; launch IDM Enhanced from the
+with `sudo apt install ./idm-enhanced_0.6.0_amd64.deb` or
+`sudo dnf install ./idm-enhanced-0.6.0-1.x86_64.rpm`; launch IDM Enhanced from the
 application menu. Windows setup installs for the current user without elevation.
 
 Open the desktop once to register its sibling native host. For Firefox, temporarily

@@ -97,7 +97,7 @@ try {
   )
     throw new Error('Output differs or history removal deleted completed data');
   console.log(
-    'PASS native WebView: settings, add, checksum, run, pause, resume, history, metadata-only removal, close and safe quit',
+    'PASS native WebView: settings, add, cancel focus/Escape, 200% text reflow, checksum, run, pause, resume, history, metadata-only removal, close and safe quit',
   );
 } finally {
   child?.kill('SIGTERM');

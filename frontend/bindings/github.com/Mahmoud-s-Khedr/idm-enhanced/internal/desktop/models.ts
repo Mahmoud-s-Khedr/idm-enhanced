@@ -93,6 +93,7 @@ export class JobView {
     "host": string;
     "state": string;
     "error": string;
+    "guidance": string;
     "bytes": number;
     "total": number;
     "order": number;
@@ -118,6 +119,9 @@ export class JobView {
         }
         if (!("error" in $$source)) {
             this["error"] = "";
+        }
+        if (!("guidance" in $$source)) {
+            this["guidance"] = "";
         }
         if (!("bytes" in $$source)) {
             this["bytes"] = 0;

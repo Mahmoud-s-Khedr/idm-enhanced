@@ -12,6 +12,7 @@ test('controls completed, queued, unknown-size and cancelled jobs with explicit 
       scheduled: '2030-01-01T12:00:00Z',
       retryAt: '2030-01-01T12:00:00Z',
       error: 'needs_attention',
+      guidance: 'Preserve existing files; choose a new destination.',
     }),
     new JobView({ id: 'b', name: 'second', state: 'queued', total: 10 }),
     new JobView({
@@ -30,6 +31,11 @@ test('controls completed, queued, unknown-size and cancelled jobs with explicit 
   const first = within(screen.getByRole('article', { name: 'first' }));
   const second = within(screen.getByRole('article', { name: 'second' }));
   expect(first.getByRole('progressbar')).not.toHaveAttribute('value');
+  expect(first.getByRole('progressbar')).toHaveAttribute(
+    'aria-valuetext',
+    '0.00 MiB downloaded; size unknown',
+  );
+  expect(first.getByText(/Preserve existing files/)).toBeInTheDocument();
   second.getByText('Move to front').click();
   expect(control).toHaveBeenLastCalledWith({
     action: 'reorder',
@@ -51,6 +57,11 @@ test('controls completed, queued, unknown-size and cancelled jobs with explicit 
   fireEvent.click(first.getByText('Restart'));
   expect(control).toHaveBeenLastCalledWith({ action: 'restart', id: 'a' });
   confirm.mockRestore();
+  fireEvent.click(first.getByText('Cancel…'));
+  expect(first.getByText('Keep partial')).toHaveFocus();
+  fireEvent.keyDown(first.getByText('Keep partial'), { key: 'Escape' });
+  expect(first.getByText('Cancel…')).toHaveFocus();
+  expect(first.queryByText('Keep partial')).not.toBeInTheDocument();
   fireEvent.click(first.getByText('Cancel…'));
   fireEvent.click(first.getByText('Go back'));
   expect(first.queryByText('Keep partial')).not.toBeInTheDocument();
@@ -81,6 +92,11 @@ test('controls completed, queued, unknown-size and cancelled jobs with explicit 
     ),
   );
   expect(control).toHaveBeenLastCalledWith({ action: 'remove', id: 'd' });
+  expect(
+    within(screen.getByRole('article', { name: 'cancelled' })).getByRole(
+      'progressbar',
+    ),
+  ).toHaveAttribute('value', '0');
 });
 test('empty lists explain how to proceed and active runs disable destructive actions', () => {
   const view = render(

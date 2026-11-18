@@ -24,6 +24,27 @@ header,
   justify-content: space-between;
   gap: 12px;
 }
+.job-heading {
+  flex-wrap: wrap;
+}
+.job-heading h3 {
+  min-width: 0;
+}
+.input-row {
+  margin-bottom: 14px;
+}
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  padding: 12px;
+  background: #82dbc3;
+  color: #102a25;
+  z-index: 1;
+}
+.skip-link:focus {
+  top: 8px;
+}
 h1 {
   font-size: clamp(1.6rem, 3vw, 2.4rem);
   margin: 8px 0;
@@ -186,6 +207,7 @@ progress {
   }
   header {
     align-items: flex-start;
+    flex-wrap: wrap;
   }
   .toolbar {
     flex-wrap: wrap;
@@ -213,6 +235,9 @@ progress {
   }
   .eyebrow {
     color: #17634e;
+  }
+  :focus-visible {
+    outline-color: #17634e;
   }
   .badge {
     background: #e0ecee;

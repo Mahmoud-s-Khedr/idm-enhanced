@@ -1,17 +1,20 @@
 #ifndef SourceRoot
   #error SourceRoot must point to the repository
 #endif
+#ifndef AppVersion
+  #error AppVersion must be supplied by tools/package
+#endif
 [Setup]
 AppId=IDMEnhancedAlpha
 AppName=IDM Enhanced
-AppVersion=0.5.0
+AppVersion={#AppVersion}
 AppPublisher=IDM Enhanced contributors
 DefaultDirName={localappdata}\Programs\IDM Enhanced
 DefaultGroupName=IDM Enhanced
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-OutputBaseFilename=idm-enhanced-0.5.0-windows-amd64-setup
+OutputBaseFilename=idm-enhanced-{#AppVersion}-windows-amd64-setup
 Compression=lzma2
 SolidCompression=yes
 UninstallDisplayIcon={app}\desktop.exe

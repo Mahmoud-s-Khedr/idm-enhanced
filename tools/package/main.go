@@ -11,11 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
 
-const version = "0.5.0"
+var version = "0.6.0"
 
 func main() {
 	if err := run(); err != nil {
@@ -25,8 +26,13 @@ func main() {
 }
 func run() error {
 	format := flag.String("format", runtime.GOOS, "deb, rpm, windows, or extensions")
+	flag.StringVar(&version, "version", version, "numeric package version (also used by controlled upgrade fixtures)")
+	destination := flag.String("out", "build/packages", "artifact output directory")
 	flag.Parse()
-	out, err := filepath.Abs("build/packages")
+	if !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(version) {
+		return fmt.Errorf("invalid package version")
+	}
+	out, err := filepath.Abs(*destination)
 	if err != nil {
 		return err
 	}
@@ -47,7 +53,7 @@ func run() error {
 		if compiler == "" {
 			compiler = `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
 		}
-		if err = command(compiler, "/DSourceRoot="+root, "/O"+out, "packaging/windows.iss"); err != nil {
+		if err = command(compiler, "/DSourceRoot="+root, "/DAppVersion="+version, "/O"+out, "packaging/windows.iss"); err != nil {
 			return err
 		}
 	case "deb", "rpm":

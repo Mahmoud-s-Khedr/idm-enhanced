@@ -88,3 +88,11 @@ Hosted run 44296819095 passed Debian/Fedora native package installation,
 registration/unregister/uninstall/data retention and artifact upload, Windows
 native tests plus setup/uninstall/artifact upload, and macOS native checks.
 The final review corrections require a fresh final-head CI run before merge.
+
+## Protected acceptance
+
+PR #7 merged as b77ba5117ae2e95056488e3ad345d53d85dd3796 after final head
+3b38292b510221486cf5a0f3904a81168dc2d9f1 passed [Quality run 44298050894](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44298050894).
+Required checks, quality, all native/package jobs and Windows installer smoke
+passed. This merge record was verified before starting M6. Earlier pending
+statements above are historical checkpoints.
