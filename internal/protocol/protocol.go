@@ -47,7 +47,7 @@ func (m Message) Validate() error {
 	}
 	switch m.Type {
 	case "download":
-		if m.Mode != "" && m.Mode != "hls" {
+		if m.Mode != "" && m.Mode != "hls" && m.Mode != "dash" {
 			return errors.New("unsupported download mode")
 		}
 		if m.Error != "" {

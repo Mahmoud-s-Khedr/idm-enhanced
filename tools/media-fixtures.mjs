@@ -1,5 +1,5 @@
-// Shared immutable local HLS fixture bytes for native and browser acceptance.
-import { readFileSync } from 'node:fs';
+// Shared immutable local HLS/DASH fixture bytes for native and browser acceptance.
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 const paths = [
   'master.m3u8',
@@ -15,6 +15,11 @@ const bodies = new Map(
     readFileSync(join('testdata/hls', path)),
   ]),
 );
-export function hlsFixture(path) {
+for (const path of readdirSync('testdata/dash').filter((name) =>
+  /\.(mpd|mp4|m4s)$/.test(name),
+)) {
+  bodies.set(`/dash/${path}`, readFileSync(join('testdata/dash', path)));
+}
+export function mediaFixture(path) {
   return bodies.get(path?.split('?')[0]);
 }

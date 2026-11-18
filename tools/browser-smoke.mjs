@@ -1,6 +1,6 @@
 // Linux acceptance smoke against a running native desktop app. Uses disposable
 // browser profiles, real installed extensions, and each browser's native host.
-import { hlsFixture } from './hls-fixture.mjs';
+import { mediaFixture } from './media-fixtures.mjs';
 import { createServer } from 'node:http';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import {
@@ -22,11 +22,12 @@ const evidence = [];
 const originalHome = process.env.HOME;
 const server = createServer((request, response) =>
   response.end(
-    request.url?.startsWith('/hls/')
-      ? hlsFixture(request.url)
+    request.url?.startsWith('/hls/') || request.url?.startsWith('/dash/')
+      ? mediaFixture(request.url)
       : 'M5 browser fixture',
   ),
 );
+let dashURL;
 let mediaURL;
 let fixtureURL;
 
@@ -160,8 +161,36 @@ async function firefox() {
           args: [],
         })) === mediaAccepted,
     );
+    await webdriver(`/session/${sessionId}/execute/sync`, {
+      script:
+        'document.querySelector("#url").value=arguments[0];document.querySelector("#filename").value="firefox-dash.mpd";document.querySelector("#dash").checked=true;document.querySelector("form").requestSubmit();return true;',
+      args: [dashURL],
+    });
+    const dashAccepted = await until(async () => {
+      const text = await webdriver(`/session/${sessionId}/execute/sync`, {
+        script: 'return document.querySelector("output").textContent',
+        args: [],
+      });
+      return (
+        text.startsWith('Queued in desktop as ') &&
+        text !== mediaAccepted &&
+        text
+      );
+    });
+    await webdriver(`/session/${sessionId}/execute/sync`, {
+      script: 'document.querySelector("#retry").click();return true;',
+      args: [],
+    });
+    await until(
+      async () =>
+        (await webdriver(`/session/${sessionId}/execute/sync`, {
+          script: 'return document.querySelector("output").textContent',
+          args: [],
+        })) === dashAccepted,
+    );
     evidence.push({
       mediaAccepted,
+      dashAccepted,
       browser: 'Firefox',
       version: capabilities.browserVersion,
       result,
@@ -290,8 +319,28 @@ async function chromium() {
         (await evaluate('document.querySelector("output").textContent')).result
           .value === mediaAccepted,
     );
+    await evaluate(
+      `document.querySelector('#url').value=${JSON.stringify(dashURL)};document.querySelector('#filename').value='chrome-dash.mpd';document.querySelector('#dash').checked=true;document.querySelector('form').requestSubmit();`,
+    );
+    const dashAccepted = await until(async () => {
+      const text = (
+        await evaluate('document.querySelector("output").textContent')
+      ).result.value;
+      return (
+        text.startsWith('Queued in desktop as ') &&
+        text !== mediaAccepted &&
+        text
+      );
+    });
+    await evaluate('document.querySelector("#retry").click()');
+    await until(
+      async () =>
+        (await evaluate('document.querySelector("output").textContent')).result
+          .value === dashAccepted,
+    );
     evidence.push({
       mediaAccepted,
+      dashAccepted,
       browser: 'Chromium',
       version: version.Browser,
       result,
@@ -306,6 +355,7 @@ try {
     throw new Error('Live browser smoke currently runs on Linux');
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   fixtureURL = `http://127.0.0.1:${server.address().port}/file`;
+  dashURL = `http://127.0.0.1:${server.address().port}/dash/manifest.mpd`;
   mediaURL = `http://127.0.0.1:${server.address().port}/hls/master.m3u8`;
   process.env.HOME = join(temporary, 'home');
   process.env.XDG_CONFIG_HOME = join(temporary, 'config');
@@ -336,8 +386,10 @@ try {
     !status.includes('chrome-m5.bin') ||
     !status.includes('firefox-hls.mp4') ||
     !status.includes('chrome-hls.mp4') ||
-    status.split('media objects=0/0').length - 1 !== 2 ||
-    status.split('queued').length - 1 !== 4
+    !status.includes('firefox-dash.mp4') ||
+    !status.includes('chrome-dash.mp4') ||
+    status.split('media objects=0/0').length - 1 !== 4 ||
+    status.split('queued').length - 1 !== 6
   )
     throw new Error('Browser handoffs were not durably queued exactly once');
   const report = {

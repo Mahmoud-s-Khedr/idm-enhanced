@@ -27,14 +27,20 @@
       ><br />
       <label>Filename (optional) <input id="filename" maxlength="180" /></label
       ><br />
+      <label><input type="radio" name="mode" checked /> Direct file</label>
       <label
-        ><input id="hls" type="checkbox" /> HLS VOD to MP4 (highest
+        ><input id="hls" type="radio" name="mode" /> HLS VOD to MP4 (highest
         bandwidth)</label
       ><br />
+      <label
+        ><input id="dash" type="radio" name="mode" /> DASH VOD to MP4 (highest
+        bandwidth)</label
+      >
       <p>
-        HLS requires FFmpeg and ffprobe. For quality selection, use Analyze HLS
-        in the desktop. Live, encrypted, fMP4 and alternate-audio playlists are
-        unsupported.
+        HLS and DASH require FFmpeg and ffprobe. For quality/audio selection,
+        use Analyze HLS or Analyze DASH in the desktop. Live, encrypted, fMP4
+        and alternate-audio playlists are unsupported for HLS. DASH supports
+        static single-period H.264/AAC templates.
       </p>
       <button type="submit">Queue download</button>
     </form>

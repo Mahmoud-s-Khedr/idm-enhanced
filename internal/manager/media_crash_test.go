@@ -9,11 +9,26 @@ import (
 	"time"
 )
 
-func TestMediaProcessCrashRecovery(t *testing.T) {
+func TestMediaProcessCrashRecovery(t *testing.T) { testMediaProcessCrashRecovery(t, false) }
+func TestDASHProcessCrashRecovery(t *testing.T)  { testMediaProcessCrashRecovery(t, true) }
+func testMediaProcessCrashRecovery(t *testing.T, dash bool) {
 	for _, boundary := range []string{"after-media-file-sync", "after-media-checkpoint", "before-media-assembly", "after-media-assembly", "before-verified-commit", "after-verified-commit", "after-publish", "after-remove", "after-completed"} {
 		t.Run(boundary, func(t *testing.T) {
 			m, server, _ := mediaFixture(t)
-			j := mediaJob(t, m, server)
+			if dash {
+				var other *Manager
+				other, server, _, _ = dashFixture(t)
+				if err := m.Close(); err != nil {
+					t.Fatal(err)
+				}
+				m = other
+			}
+			var j Job
+			if dash {
+				j = dashJob(t, m, server)
+			} else {
+				j = mediaJob(t, m, server)
+			}
 			if err := m.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -45,7 +60,11 @@ func TestMediaProcessCrashRecovery(t *testing.T) {
 			if output, err := command("").CombinedOutput(); err != nil {
 				t.Fatalf("media relaunch failed: %v %s", err, output)
 			}
-			assertMediaOutput(t, j)
+			if dash {
+				assertDASHOutput(t, j)
+			} else {
+				assertMediaOutput(t, j)
+			}
 			ro, err := Open(m.directory, true, server.Client())
 			if err != nil {
 				t.Fatal(err)

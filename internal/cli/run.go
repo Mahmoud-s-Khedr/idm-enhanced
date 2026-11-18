@@ -55,11 +55,12 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 	perHost := flags.Int("per-host", config.PerHost, "simultaneous requests per host")
 	rate := flags.Int64("rate", 0, "global body bytes per second (0 unlimited)")
 	retries := flags.Int("retries", config.Retries, "automatic retry count (0-8)")
+	dash := flags.Bool("dash", false, "download supported static DASH to a new MP4")
 	hls := flags.Bool("hls", false, "download supported HLS VOD to a new MP4")
-	quality := flags.String("quality", "", "HLS variant ID from media-info (default highest bandwidth)")
+	quality := flags.String("quality", "", "Media track choice ID from media-info (default highest bandwidth)")
 	quiet := flags.Bool("quiet", false, "hide progress")
 	usage := func() {
-		_, _ = fmt.Fprintln(stderr, "Usage: downloader [--state-dir DIR] -o FILE [-sha256 HEX] [-timeout 30m] [-quiet] URL; enqueue [flags] URL; resume|restart|status|cancel [flags] JOB_ID; run-queue [flags]; reorder JOB_ID...; media-info URL; download/enqueue accept -hls [-quality ID]")
+		_, _ = fmt.Fprintln(stderr, "Usage: downloader [--state-dir DIR] -o FILE [-sha256 HEX] [-timeout 30m] [-quiet] URL; enqueue [flags] URL; resume|restart|status|cancel [flags] JOB_ID; run-queue [flags]; reorder JOB_ID...; media-info URL; download/enqueue accept -hls or -dash [-quality ID]")
 	}
 	if err := flags.Parse(args); err != nil {
 		usage()
@@ -68,7 +69,7 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		}
 		return 2
 	}
-	if ((*hls || *quality != "") && command != "download" && command != "enqueue") || (command == "media-info" && flags.NArg() != 1) || *timeout <= 0 || ((command == "download" || command == "enqueue") && (flags.NArg() != 1 || *destination == "")) || ((command == "resume" || command == "restart" || command == "cancel") && flags.NArg() != 1) || (command == "status" && flags.NArg() > 1) || (command == "run-queue" && flags.NArg() != 0) || (command == "cancel" && *keep == *discard) {
+	if (*hls && *dash) || ((*hls || *dash || *quality != "") && command != "download" && command != "enqueue") || (command == "media-info" && flags.NArg() != 1) || *timeout <= 0 || ((command == "download" || command == "enqueue") && (flags.NArg() != 1 || *destination == "")) || ((command == "resume" || command == "restart" || command == "cancel") && flags.NArg() != 1) || (command == "status" && flags.NArg() > 1) || (command == "run-queue" && flags.NArg() != 0) || (command == "cancel" && *keep == *discard) {
 		usage()
 		return 2
 	}
@@ -132,7 +133,7 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 			if flags.NArg() == 0 || j.ID == flags.Arg(0) {
 				found = true
 				_, _ = fmt.Fprintf(stderr, "%s state=%s durable=%d destination=%q resumable=%t error=%s order=%d retries=%d retry_at=%s\n", j.ID, j.State, j.Durable, j.Destination, manager.Resumable(j), manager.SafeError(j), j.QueueOrder, j.RetryCount, j.RetryAt.Format(time.RFC3339))
-				if j.Kind == "hls" {
+				if j.Kind == "hls" || j.Kind == "dash" {
 					p := manager.MediaProgress(j)
 					_, _ = fmt.Fprintf(stderr, "media objects=%d/%d bytes=%d\n", p.Complete, p.Objects, p.Bytes)
 				}
@@ -150,6 +151,9 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		kind := ""
 		if *hls {
 			kind = "hls"
+		}
+		if *dash {
+			kind = "dash"
 		}
 		j, err = m.Create(ctx, manager.Options{Kind: kind, MediaChoice: *quality, URL: flags.Arg(0), Destination: *destination, SHA256: *checksum})
 		if err == nil {

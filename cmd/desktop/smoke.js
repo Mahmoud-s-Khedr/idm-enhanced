@@ -89,47 +89,59 @@
     button('Remove history').click();
     await wait(() => !document.querySelector('article'));
     button('All downloads').click();
-    await wait(() =>
-      document.querySelector(
-        'section[aria-labelledby="add-title"] input[type="checkbox"]',
-      ),
-    );
-    document
-      .querySelector(
-        'section[aria-labelledby="add-title"] input[type="checkbox"]',
+    for (const format of ['HLS', 'DASH']) {
+      button('All downloads').click();
+      const label = await wait(() =>
+        [
+          ...document.querySelectorAll(
+            'section[aria-labelledby="add-title"] label',
+          ),
+        ].find((e) => e.textContent.includes(`${format} VOD media`)),
+      );
+      label.querySelector('input').click();
+      await wait(() =>
+        [...document.querySelectorAll('button')].some(
+          (element) => element.textContent === `Analyze ${format}`,
+        ),
+      );
+      fill(
+        'input[type="url"]',
+        format === 'DASH'
+          ? window.__m4Smoke.dashURL
+          : window.__m4Smoke.mediaURL,
+      );
+      fill(
+        'input[placeholder="Full path to a new file"]',
+        format === 'DASH'
+          ? window.__m4Smoke.dashDestination
+          : window.__m4Smoke.mediaDestination,
+      );
+      await wait(() => button(`Analyze ${format}`));
+      button(`Analyze ${format}`).click();
+      await wait(
+        () => document.querySelector('select') && button('Add to queue'),
+      );
+      const quality = document.querySelector('select').options[1].value;
+      fill('select', quality);
+      document.documentElement.style.fontSize = '200%';
+      if (document.documentElement.scrollWidth > window.innerWidth)
+        throw new Error('HLS quality form overflows at 200%');
+      document.documentElement.style.fontSize = '';
+      button('Add to queue').click();
+      await wait(() => document.querySelector('article'));
+      button('Run queue').click();
+      await wait(() => document.querySelector('.badge.completed'));
+      if (
+        !document.body.textContent.includes(
+          format === 'DASH' ? '6 of 6 segments' : '2 of 2 segments',
+        )
       )
-      .click();
-    await wait(() =>
-      [...document.querySelectorAll('button')].some(
-        (element) => element.textContent === 'Analyze HLS',
-      ),
-    );
-    fill('input[type="url"]', window.__m4Smoke.mediaURL);
-    fill(
-      'input[placeholder="Full path to a new file"]',
-      window.__m4Smoke.mediaDestination,
-    );
-    await wait(() => button('Analyze HLS'));
-    button('Analyze HLS').click();
-    await wait(
-      () => document.querySelector('select') && button('Add to queue'),
-    );
-    const quality = document.querySelector('select').options[1].value;
-    fill('select', quality);
-    document.documentElement.style.fontSize = '200%';
-    if (document.documentElement.scrollWidth > window.innerWidth)
-      throw new Error('HLS quality form overflows at 200%');
-    document.documentElement.style.fontSize = '';
-    button('Add to queue').click();
-    await wait(() => document.querySelector('article'));
-    button('Run queue').click();
-    await wait(() => document.querySelector('.badge.completed'));
-    if (!document.body.textContent.includes('2 of 2 segments'))
-      throw new Error('Incorrect media resource progress');
-    button('History').click();
-    await wait(() => button('Remove history'));
-    button('Remove history').click();
-    await wait(() => !document.querySelector('article'));
+        throw new Error('Incorrect media resource progress');
+      button('History').click();
+      await wait(() => button('Remove history'));
+      button('Remove history').click();
+      await wait(() => !document.querySelector('article'));
+    }
   } catch (error) {
     result = String(error);
   }

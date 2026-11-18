@@ -53,7 +53,7 @@ func (m *Manager) AcceptBrowser(ctx context.Context, request protocol.Message, d
 	}
 	for n := 0; n < 100; n++ {
 		name := request.Filename
-		if request.Mode == "hls" {
+		if request.Mode == "hls" || request.Mode == "dash" {
 			name = strings.TrimSuffix(name, filepath.Ext(name))
 			if name == "" || len(name) > 176 {
 				name = "media"

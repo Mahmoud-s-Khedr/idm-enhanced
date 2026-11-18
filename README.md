@@ -262,3 +262,22 @@ byte-range, discontinuity and alternate-audio playlists are rejected. Keep
 unsupported or session-authenticated sources in the browser. See the exact
 [support and recovery matrix](docs/SUPPORT.md). Full checks require the real media
 tools; ordinary checks do not install them or silently substitute fake playback.
+
+## Static DASH VOD (M8)
+
+Select DASH VOD in the desktop, analyze a static MPD, choose the video/audio
+combination and save to a new MP4. The extension offers explicit DASH handoff and
+opt-in `.mpd` candidates; handoff queues the highest-bandwidth combination.
+
+```sh
+go run ./cmd/downloader media-info https://example.com/manifest.mpd
+go run ./cmd/downloader -dash -quality CHOICE_ID -o video.mp4 https://example.com/manifest.mpd
+```
+
+The supported profile is single-Period, unencrypted H.264/AAC fragmented MP4 with
+SegmentTemplate initialization and finite duration/timeline addressing. Requires
+separately installed FFmpeg and ffprobe. Completed objects can assemble offline;
+failed or interrupted jobs use the existing Resume / retry workflow. Database
+schema 6 prevents older binaries from opening new DASH state; back up before
+upgrading. See [support matrix](docs/SUPPORT.md), [M8 evidence](docs/M8_EVIDENCE.md)
+and [ADR 0008](docs/decisions/0008-m8-dash-vod.md). Human beta testing remains pending.

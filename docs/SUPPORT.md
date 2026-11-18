@@ -1,6 +1,6 @@
 # Core testing support matrix and recovery guide
 
-Updated: 2026-11-18. Version 0.7.0 is an unsigned internal testing candidate.
+Updated: 2026-11-18. Version 0.8.0 is an unsigned internal testing candidate.
 It is not a public R1 release. Beta-user acceptance is pending; the owner will
 send the candidate to testers later. No automatic update channel is provided.
 
@@ -24,7 +24,7 @@ Supported sources are direct HTTP(S) GET URLs, including directly usable MP4/Web
 file URLs. Strong ETags and validated byte ranges are required for safe resume;
 initial downloads without them can stream sequentially. Credentials embedded in
 URLs are rejected. Browser cookies, authorization replay, POST, blob/data URLs,
-DASH, encrypted media, DRM and automatic interception are unsupported. Keep those
+unsupported DASH profiles, encrypted media, DRM and automatic interception are unsupported. Keep those
 workflows in the browser. Browser admission acknowledges a durable queued job;
 choose Run queue in the running app to start it.
 
@@ -51,6 +51,29 @@ requires verified assembly and safe destination publication.
 Real local MP4 assembly/playback, desktop quality selection and both browsers'
 HLS handoff have been exercised. The discovery permission dialog and real media
 playback on Windows/macOS have not been exercised interactively.
+
+## Static DASH VOD
+
+Choose DASH VOD in Add download, analyze the MPD URL and select a video/audio
+combination, then save as `.mp4`. CLI uses `media-info URL` and `-dash -quality ID`.
+Browser popup/context-menu DASH handoff uses the highest combined bandwidth.
+
+| DASH feature             | Supported boundary                                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Presentation             | Explicit static MPD, standard namespace, one Period at zero, finite duration up to 24 hours                                         |
+| Video/audio              | H.264 AVC / AAC-LC fragmented MP4, one selected representation per track; audio-only/video-only supported                           |
+| Selection                | Explicit video/audio combinations, including alternate audio languages                                                              |
+| Addressing               | SegmentTemplate with mandatory initialization; Number/Time/RepresentationID/Bandwidth substitutions                                 |
+| Timing                   | Fixed duration or contiguous zero-based SegmentTimeline; finite bounded repeats including r=-1                                      |
+| URL/template inheritance | Single BaseURL per level and inherited SegmentTemplate attributes/timeline                                                          |
+| Unsupported              | Live/dynamic, DRM/encryption, multiple Periods, SegmentBase/SegmentList/ranges, nonzero offsets, gaps, subtitles, unknown semantics |
+
+The same object validation and offline retry policies as HLS apply. Both `ffmpeg`
+and `ffprobe` must be on PATH. DASH temporarily uses additional local space for
+seekable track copies; ordinary cleanup removes staging. A process kill during
+muxing can leave a private `.idm-mux-*` directory beside the output for inspection.
+Cached resources remain until explicit discard or history removal. Existing
+partial ownership and exclusive publication protections remain in force.
 
 ## Safe recovery
 
@@ -91,9 +114,8 @@ Install the newer package over the existing installation, open the desktop and
 verify the queue and native-host registration. Linux uses the DEB/RPM package
 manager; Windows uses the per-user setup. The workflow tests upgrade mechanics
 using a controlled 0.5.0 predecessor package assembled from current sources and
-then 0.7.0. It does not claim an archived M5-binary upgrade test. Released schema
-migration compatibility is covered separately by storage fixtures. M7 advances the database to schema 5 for media
-checkpoints and retains file checkpoint v1. Back up before this migration.
+then 0.8.0. It does not claim an archived M5-binary upgrade test. Released schema
+migration compatibility is covered separately by storage fixtures. M8 advances the database to schema 6 as a DASH compatibility barrier; file checkpoint v1 and HLS media checkpoint v1 are retained. Back up before this migration.
 
 Uninstall preserves downloads and application state. On Linux run the installed
 native-host --unregister as the normal user before removing the package. Windows

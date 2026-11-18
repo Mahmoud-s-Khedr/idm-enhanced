@@ -22,7 +22,9 @@ func TestMain(m *testing.M) {
 		name := filepath.Base(os.Args[0])
 		args := strings.Join(os.Args[1:], " ")
 		if strings.Contains(name, "ffmpeg") {
-			if !strings.Contains(args, "-protocol_whitelist pipe -f mpegts -i pipe:0") || !strings.Contains(args, "-c copy") || strings.Contains(args, "http") {
+			hls := strings.Contains(args, "-protocol_whitelist pipe -f mpegts -i pipe:0")
+			dash := strings.Contains(args, "-protocol_whitelist file -f mov -enable_drefs 0 -use_absolute_path 0 -i")
+			if (!hls && !dash) || !strings.Contains(args, "-c copy") || strings.Contains(args, "http") {
 				os.Exit(9)
 			}
 			if mode == "hang" {
@@ -57,6 +59,13 @@ func TestMain(m *testing.M) {
 				os.Exit(4)
 			}
 			data := probeGood
+			if strings.Contains(args, ".idm-mux-") {
+				codec, kind := "h264", "video"
+				if strings.Contains(args, "1.mp4") {
+					codec, kind = "aac", "audio"
+				}
+				data = fmt.Sprintf(`{"streams":[{"codec_type":%q,"codec_name":%q}],"format":{"duration":"1.0","size":"64"}}`, kind, codec)
+			}
 			if mode == "bad_json" {
 				data = "{"
 			}
@@ -176,5 +185,49 @@ func TestObjectSizeBoundAndWriterErrors(t *testing.T) {
 	writer = cappedWriter{writer: &out, remaining: 0}
 	if _, err := writer.Write([]byte("x")); !errors.Is(err, ErrLimit) {
 		t.Fatal(err)
+	}
+}
+
+func TestDASHMuxLocalFilesAndCleanup(t *testing.T) {
+	binaries := fakeTools(t)
+	for _, mode := range []string{"ok", "ffmpeg_error", "bad_magic", "bad_codec", "hang"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("IDM_MEDIA_TOOL_MODE", mode)
+			directory := t.TempDir()
+			out, err := os.CreateTemp(directory, "out-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = out.Close() }()
+			ctx := context.Background()
+			if mode == "hang" {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+				defer cancel()
+			}
+			tracks := []TrackInput{{Reader: strings.NewReader("initvideo"), Bytes: 9, Kind: "video"}, {Reader: strings.NewReader("initaudio"), Bytes: 9, Kind: "audio"}}
+			err = assembleTracks(ctx, tracks, out, binaries)
+			if (err == nil) != (mode == "ok") {
+				t.Fatal(mode, err)
+			}
+			entries, e := os.ReadDir(directory)
+			if e != nil || len(entries) != 1 {
+				t.Fatal("leaked staging files", entries, e)
+			}
+		})
+	}
+	t.Setenv("IDM_MEDIA_TOOL_MODE", "ok")
+	out, err := os.CreateTemp(t.TempDir(), "out-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = out.Close() }()
+	for _, tracks := range [][]TrackInput{nil, {{Reader: nil, Bytes: 1, Kind: "video"}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "subtitle"}}, {{Reader: strings.NewReader("x"), Bytes: 2, Kind: "video"}}, {{Reader: strings.NewReader("xx"), Bytes: 1, Kind: "video"}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "video"}, {Reader: strings.NewReader("x"), Bytes: 1, Kind: "video"}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "audio"}}} {
+		if err := assembleTracks(context.Background(), tracks, out, binaries); err == nil {
+			t.Fatal("accepted invalid input/mismatched streams", tracks)
+		}
+	}
+	if err := assembleTracks(context.Background(), nil, nil, binaries); err == nil {
+		t.Fatal("nil output")
 	}
 }

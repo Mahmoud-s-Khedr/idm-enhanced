@@ -31,6 +31,9 @@ var migrationM5 string
 //go:embed migrations/005.sql
 var migrationM7 string
 
+//go:embed migrations/006.sql
+var migrationM8 string
+
 type Interval struct {
 	Start, End int64
 	Digest     string
@@ -151,7 +154,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 5 || (readonly && version < 1) {
+	if version > 6 || (readonly && version < 1) {
 		return nil, errors.New("unsupported database version")
 	}
 	if !readonly {
@@ -161,7 +164,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 		if err = s.configure("synchronous", "FULL", "2"); err != nil {
 			return nil, err
 		}
-		for target, script := range []string{migration, migrationM3, migrationM4, migrationM5, migrationM7} {
+		for target, script := range []string{migration, migrationM3, migrationM4, migrationM5, migrationM7, migrationM8} {
 			if version > target {
 				continue
 			}
@@ -231,7 +234,7 @@ func (s *Store) saveBatch(ctx context.Context, jobs []Job, requestID, fingerprin
 		if j.MediaLoaded {
 			if len(j.Media) == 0 {
 				_, err = tx.ExecContext(ctx, "DELETE FROM media_checkpoints WHERE job_id=?", j.ID)
-			} else if j.Kind != "hls" || len(j.Media) > 4<<20 || !json.Valid(j.Media) {
+			} else if (j.Kind != "hls" && j.Kind != "dash") || len(j.Media) > 4<<20 || !json.Valid(j.Media) {
 				err = errors.New("invalid media checkpoint")
 			} else {
 				_, err = tx.ExecContext(ctx, "INSERT INTO media_checkpoints VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET record=excluded.record", j.ID, []byte(j.Media))
@@ -271,7 +274,7 @@ func (s *Store) Get(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	if j.Kind == "hls" {
+	if j.Kind == "hls" || j.Kind == "dash" {
 		j.MediaLoaded = true
 		err = s.db.QueryRowContext(ctx, "SELECT record FROM media_checkpoints WHERE job_id=?", id).Scan(&j.Media)
 		if errors.Is(err, sql.ErrNoRows) {

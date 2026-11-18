@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-var version = "0.7.0"
+var version = "0.8.0"
 
 func main() {
 	if err := run(); err != nil {

@@ -96,7 +96,7 @@ func TestRepository(t *testing.T) {
 	if err = s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='transient'").Scan(&count); err != nil || count != 0 {
 		t.Fatal("migration did not roll back", err)
 	}
-	if _, err = s.db.Exec("PRAGMA user_version=6"); err != nil {
+	if _, err = s.db.Exec("PRAGMA user_version=7"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {
@@ -303,7 +303,7 @@ func TestM2UpgradeAndAtomicReorder(t *testing.T) {
 		t.Fatal("upgrade lost checkpoint", got, err)
 	}
 	var version, count int
-	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
 		t.Fatal(version, err)
 	}
 	if err = s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='temporary_m3'").Scan(&count); err != nil || count != 0 {

@@ -17,8 +17,8 @@ const MaxPlaylist = 1 << 20
 const MaxObjects = 2048
 const MaxObjectBytes int64 = 256 << 20
 
-var ErrUnsupported = errors.New("unsupported HLS VOD profile")
-var ErrLimit = errors.New("HLS resource limit exceeded")
+var ErrUnsupported = errors.New("unsupported media profile")
+var ErrLimit = errors.New("media resource limit exceeded")
 
 type Variant struct {
 	ID         string `json:"id"`
@@ -34,6 +34,7 @@ type Playlist struct {
 	Duration float64
 }
 type Plan struct {
+	Tracks         []Track `json:",omitempty"`
 	SourceDigest   string
 	PlaylistDigest string
 	PlaylistURL    string

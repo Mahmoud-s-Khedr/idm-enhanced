@@ -99,3 +99,12 @@ No handwritten source is excluded and budgets remain unchanged. Active-tab
 discovery adds user-gesture scripting permissions, without broad host/cookie
 access; live permission/site coverage and Windows/macOS playback remain explicit
 limitations rather than green-check claims.
+
+## M8 activation
+
+Static DASH remains under the existing critical media coverage, architecture,
+race/recovery and mandatory real-media gates. Media-smoke now decodes all four
+synthetic DASH video/audio combinations after offline persisted assembly retry.
+Native desktop/browser smoke includes explicit DASH analysis/selection/handoff.
+Schema-6 upgrades and package version 0.8.0 use the existing required platform and
+installer jobs. No thresholds, budgets, exclusions or required checks change.
