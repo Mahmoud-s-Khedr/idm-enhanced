@@ -129,3 +129,19 @@ size checks cover the extra copy; temporary disk costs are documented in SUPPORT
 Regressions reject both a 1.5-second declared terminal overlap and apparently aligned
 one-second timing backed by two-second encoded fragments, with no published output.
 All four real selected-track combinations must still mux offline and fully decode.
+
+## FFmpeg runtime compatibility correction
+
+Run 44423480818 passed all native platforms and Debian/Fedora/Windows installers,
+but the mandatory real-media gate with Ubuntu FFmpeg/ffprobe 6.1.1 exposed an AAC
+packet-duration difference from local 9.0.2. Both versions read the input as
+exactly two seconds; 6.1.1 remuxed the last short AAC packet as a full frame,
+extending output to 2.020136 seconds, correctly rejected by the new validation.
+
+A bounded numeric setts bitstream expression now preserves the independently
+validated Period end in packet timebase units, with nearest-tick rounding to avoid
+binary decimal artifacts. This changes packet timing metadata, with stream-copy
+payloads and no transcoding. Strict input/stream/output duration checks remain
+unchanged, so incorrect source timing is rejected before the filter can run.
+The isolated Ubuntu 24.04 / FFmpeg 6.1.1 real-media suite passed using the current CGO-disabled Go test binary: all four DASH choices, both duration-rejection cases, and both HLS qualities. The local 9.0.2 real-media suite also passed. Fresh final-head hosted checks remain required. Runtime minimums, test fixtures and thresholds
+are not raised or relaxed to bypass the failure.

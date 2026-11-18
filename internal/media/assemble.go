@@ -298,6 +298,13 @@ func assembleTracks(ctx context.Context, tracks []TrackInput, output *os.File, b
 		}
 		args = append(args, "-map", strconv.Itoa(i)+":"+selector)
 	}
+	// Older demuxers report a full AAC frame duration for the last packet,
+	// even when the input container ends earlier. Preserve the already-validated
+	// Period end in packet timebase units without changing encoded payloads.
+	if seen["audio"] {
+		end := strconv.FormatFloat(tracks[0].Duration, 'f', -1, 64)
+		args = append(args, "-bsf:a", "setts=duration='min(DURATION,max(0,round("+end+"/TB)-PTS))'")
+	}
 	// A seekable MP4 preserves edit lists and AAC priming. Fragmented pipe
 	// output shifts AAC priming into the presentation and can lengthen video.
 	stagedOutput := filepath.Join(directory, "muxed.mp4")
