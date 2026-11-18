@@ -96,6 +96,4 @@ fragment or rejecting a complete finite timeline. DASH durations now use bounded
 exact rational arithmetic through the integer tick ceiling. Regressions cover
 fixed-duration, finite and r=-1 timelines, exact decimal boundaries, nanosecond
 precision and a genuine fractional tick that still requires upward rounding.
-The float summary no longer determines addressing. Corrected-head full checks and
-hosted required checks must pass before merge; an earlier green head is not
-inherited as evidence.
+The float summary no longer determines addressing. Corrected-head local `check:full` passed again. Hosted required checks must pass before merge; an earlier green head is not inherited as evidence.

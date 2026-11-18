@@ -4,7 +4,7 @@ Status: M0–M7 engineering merged; M8 static DASH implemented (protected accept
 
 Date: 2026-11-16
 
-Updated: 2026-11-18 — M7 media tracked in docs/M7_EVIDENCE.md and ADR 0007; support/recovery matrix in docs/SUPPORT.md
+Updated: 2026-11-19 — M8 static DASH tracked in docs/M8_EVIDENCE.md and ADR 0008; support/recovery matrix in docs/SUPPORT.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 
