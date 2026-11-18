@@ -100,8 +100,10 @@ without restarting. Focused manager/desktop race tests cover this correction.
 
 Hosted Ubuntu native provisioning stalled on its regional EC2 apt mirror,
 including a fresh-runner retry. The shared hosted-Ubuntu bootstrap now replaces
-only EC2 archive URIs with Ubuntu's HTTPS public archive and bounds apt network
-waits/retries. Signed repository verification, packages and required jobs are
+regional archive URIs with Ubuntu's HTTPS public archive in both source files
+and the hosted image's indirect apt-mirrors.txt list. Logs exposed the indirect
+list after the initial source-file-only correction. Apt network waits/retries
+and the overall provisioning step are bounded. Signed repository verification, packages and required jobs are
 unchanged. Other distro packaging jobs keep their native repositories. This is
 provisioning resilience, not a platform/test exclusion.
 

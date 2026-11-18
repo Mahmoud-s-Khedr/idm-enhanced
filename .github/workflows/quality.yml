@@ -27,6 +27,7 @@ jobs:
           version: 12.21.0
           run_install: false
       - run: sudo sh tools/install-ubuntu-deps.sh
+        timeout-minutes: 10
       - run: go run ./tools/quality bootstrap
       - run: go run ./tools/quality check:full
       - run: go run ./tools/quality task history-secrets
@@ -51,6 +52,7 @@ jobs:
           run_install: false
       - if: runner.os == 'Linux'
         run: sudo sh tools/install-ubuntu-deps.sh
+        timeout-minutes: 10
       - run: go run ./tools/quality bootstrap-deps
       - run: go run ./tools/quality task build
       - run: go test -vet=off -count=1 ./...
