@@ -31,8 +31,7 @@ RepresentationID, Bandwidth, escaped dollars and one-digit zero-padding widths.
 Fixed duration and contiguous SegmentTimeline t/d/r addressing are supported.
 Period duration decimals remain exact rational values (bounded to 128 characters) until the ceiling conversion to integer timescale ticks; floating point is used only for the duration summary. Negative r=-1 repeats are expanded only up to a following explicit, aligned start
 or the finite Period end; expansion is bounded before allocating resource lists.
-Timelines start at zero and cover the Period without gaps/overlaps. The final
-segment may overlap the Period end. presentationTimeOffset must be absent or zero.
+Timelines start at zero and cover the Period without gaps/overlaps. Every track must end exactly at the Period boundary; terminal overlap and fractional ticks requiring clipping are rejected. presentationTimeOffset must be absent or zero.
 BaseURL is resolved at each level against the effective redirected manifest URL;
 multiple alternatives, credentials, fragments and HTTPS downgrade are rejected.
 
@@ -72,14 +71,13 @@ Go builds seekable initialization+fragment files inside a random private staging
 directory beside the output, protected with the shared native filesystem owner/permission helper (including a user-only Windows DACL), accommodating Windows without Unix-only descriptors.
 Each staged input is inspected with bounded ffprobe output and must contain exactly its declared supported track before muxing. FFmpeg receives only those local generated paths, forced MOV input, file-only
 protocols, disabled external data references, explicit selected stream maps and
-stream-copy fragmented MP4 output. No remote URL/manifest or cache filename is
-passed to FFmpeg. See [FFmpeg protocol controls](https://ffmpeg.org/ffmpeg-protocols.html).
+stream-copy MP4 output into a generated private seekable file. Seekable output preserves AAC priming/edit lists; Go then copies it with cancellation and a hard byte cap into the existing owned output. FFmpeg receives a file-size limit, and Go independently rejects oversized temporary output before copying. Staged inputs and final output must match the MPD duration within one microsecond of ffprobe precision. No remote URL/manifest or cache filename is
+passed to FFmpeg. See [FFmpeg protocol controls](https://ffmpeg.org/ffmpeg-protocols.html) and [MP4 muxer timing options](https://ffmpeg.org/ffmpeg-formats.html).
 The existing bounded subprocess runner, ffprobe validation, output sync, verified
 checkpoint and exclusive manager publication remain shared with HLS.
 
 Staging is removed after success or ordinary failure; downloaded owned caches
-remain available for retry. Temporary disk space can include the cache, one staged
-copy and the assembled output. A process kill during staging/muxing can leave an
+remain available for retry. Temporary disk space can include the cache, one staged track copy, a private muxed MP4 and the owned assembled output. A process kill during staging/muxing can leave an
 unpublished .idm-mux-* directory for inspection; no power-loss cleanup guarantee
 is made. Unverified output is never published. FFmpeg/ffprobe remain optional,
 separately installed tools and are not bundled. Local real playback evidence does

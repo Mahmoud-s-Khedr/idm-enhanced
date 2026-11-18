@@ -275,7 +275,7 @@ go run ./cmd/downloader -dash -quality CHOICE_ID -o video.mp4 https://example.co
 ```
 
 The supported profile is single-Period, unencrypted H.264/AAC fragmented MP4 with
-SegmentTemplate initialization and finite duration/timeline addressing. Requires
+SegmentTemplate initialization and finite duration/timeline addressing with aligned presentation ends. Requires
 separately installed FFmpeg and ffprobe. Completed objects can assemble offline;
 failed or interrupted jobs use the existing Resume / retry workflow. Database
 schema 6 prevents older binaries from opening new DASH state; back up before

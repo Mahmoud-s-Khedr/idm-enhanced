@@ -173,7 +173,7 @@ func parseDuration(value string) (*big.Rat, error) {
 	return total, nil
 }
 
-func dashEndTick(duration *big.Rat, scale int64) int64 {
+func dashEndTick(duration *big.Rat, scale int64) (int64, bool) {
 	scaled := new(big.Rat).Mul(duration, new(big.Rat).SetInt64(scale))
 	ticks, remainder := new(big.Int), new(big.Int)
 	ticks.QuoRem(scaled.Num(), scaled.Denom(), remainder)
@@ -181,7 +181,7 @@ func dashEndTick(duration *big.Rat, scale int64) int64 {
 		ticks.Add(ticks, big.NewInt(1))
 	}
 	// Duration and scale have already been bounded to 86,400 and 1e9.
-	return ticks.Int64()
+	return ticks.Int64(), remainder.Sign() == 0
 }
 
 func dashInt(value string, fallback int64) (int64, error) {
@@ -435,7 +435,10 @@ func dashObjects(t *dashNode, source, id string, bandwidth int64, duration *big.
 		return nil, err
 	}
 	result := []string{init}
-	end := dashEndTick(duration, scale)
+	end, aligned := dashEndTick(duration, scale)
+	if !aligned {
+		return nil, ErrUnsupported
+	}
 	var times []int64
 	timeline, err := t.one("SegmentTimeline")
 	if err != nil {
@@ -443,7 +446,7 @@ func dashObjects(t *dashNode, source, id string, bandwidth int64, duration *big.
 	}
 	if timeline == nil {
 		d, e := dashInt(t.attrs["duration"], 0)
-		if e != nil || d == 0 {
+		if e != nil || d == 0 || end%d != 0 {
 			return nil, ErrUnsupported
 		}
 		for time := int64(0); time < end; time += d {
@@ -500,7 +503,7 @@ func dashObjects(t *dashNode, source, id string, bandwidth int64, duration *big.
 				current += d
 			}
 		}
-		if current < end {
+		if current != end {
 			return nil, ErrUnsupported
 		}
 	}

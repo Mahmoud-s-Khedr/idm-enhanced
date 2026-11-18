@@ -95,7 +95,7 @@ point could turn PT1.1S at timescale 100 into 111 ticks, requesting an extra
 fragment or rejecting a complete finite timeline. DASH durations now use bounded
 exact rational arithmetic through the integer tick ceiling. Regressions cover
 fixed-duration, finite and r=-1 timelines, exact decimal boundaries, nanosecond
-precision and a genuine fractional tick that still requires upward rounding.
+precision and exact upward tick calculation. Ends requiring clipping are now explicitly rejected by the profile, as explained in the presentation-boundary correction below.
 The float summary no longer determines addressing. Corrected-head local `check:full` passed again. Hosted required checks must pass before merge; an earlier green head is not inherited as evidence.
 
 ## Hosted retry-fixture correction
@@ -109,3 +109,23 @@ The fixture now requires the exact RetryAt to survive recovery and records the
 actual HTTP request timestamp, rejecting any request before the saved deadline.
 It also requires the request to reach the fixture. Transfer/retry policy and
 coverage thresholds are unchanged. Corrected-head validation remains mandatory.
+
+## Presentation-boundary review correction
+
+A second automated review identified that complete terminal fragments could extend
+past the MPD Period, while the assembly boundary did not receive that duration.
+The initial profile now requires exact terminal alignment in every track and
+rejects overlaps/non-integral Period ticks that require clipping. Declared timing
+and actual encoded track durations are independently checked. The manager carries
+Period duration into muxing; bounded ffprobe validation checks each staged input
+and the final output to one microsecond of reported duration precision.
+
+Real validation also exposed AAC priming being shifted into fragmented pipe output,
+lengthening a two-second fixture by about 23 ms. DASH now stream-copies to a private
+seekable MP4 with edit lists and microsecond movie timescale, preserving the exact
+two-second presentation. Go copies the bounded temporary output into the existing
+owned finalization path. HLS keeps its existing pipe assembly. Cancellation and
+size checks cover the extra copy; temporary disk costs are documented in SUPPORT.md.
+Regressions reject both a 1.5-second declared terminal overlap and apparently aligned
+one-second timing backed by two-second encoded fragments, with no published output.
+All four real selected-track combinations must still mux offline and fully decode.

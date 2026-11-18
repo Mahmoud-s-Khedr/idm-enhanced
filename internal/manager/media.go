@@ -511,7 +511,7 @@ func (m *Manager) assembleMedia(ctx context.Context, j *Job, cp mediaCheckpoint)
 			for _, o := range cp.Objects[start:track.End] {
 				size += o.Length
 			}
-			inputs = append(inputs, media.TrackInput{Reader: r, Bytes: size, Kind: track.Kind})
+			inputs = append(inputs, media.TrackInput{Reader: r, Bytes: size, Kind: track.Kind, Duration: cp.Plan.Duration})
 			start = track.End
 		}
 		mux := m.assembleTracks
@@ -696,7 +696,7 @@ func validateMediaTracks(kind string, p media.Plan, count int) error {
 		}
 		return nil
 	}
-	if kind != "dash" || len(p.Tracks) == 0 || len(p.Tracks) > 2 {
+	if kind != "dash" || p.Duration <= 0 || p.Duration > 86400 || len(p.Tracks) == 0 || len(p.Tracks) > 2 {
 		return errMediaOwnership
 	}
 	start := 0

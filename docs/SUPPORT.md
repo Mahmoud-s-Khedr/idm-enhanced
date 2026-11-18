@@ -58,19 +58,19 @@ Choose DASH VOD in Add download, analyze the MPD URL and select a video/audio
 combination, then save as `.mp4`. CLI uses `media-info URL` and `-dash -quality ID`.
 Browser popup/context-menu DASH handoff uses the highest combined bandwidth.
 
-| DASH feature             | Supported boundary                                                                                                                  |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Presentation             | Explicit static MPD, standard namespace, one Period at zero, finite duration up to 24 hours                                         |
-| Video/audio              | H.264 AVC / AAC-LC fragmented MP4, one selected representation per track; audio-only/video-only supported                           |
-| Selection                | Explicit video/audio combinations, including alternate audio languages                                                              |
-| Addressing               | SegmentTemplate with mandatory initialization; Number/Time/RepresentationID/Bandwidth substitutions                                 |
-| Timing                   | Fixed duration or contiguous zero-based SegmentTimeline; finite bounded repeats including r=-1                                      |
-| URL/template inheritance | Single BaseURL per level and inherited SegmentTemplate attributes/timeline                                                          |
-| Unsupported              | Live/dynamic, DRM/encryption, multiple Periods, SegmentBase/SegmentList/ranges, nonzero offsets, gaps, subtitles, unknown semantics |
+| DASH feature             | Supported boundary                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Presentation             | Explicit static MPD, standard namespace, one Period at zero, finite duration up to 24 hours                                                                               |
+| Video/audio              | H.264 AVC / AAC-LC fragmented MP4, one selected representation per track; audio-only/video-only supported                                                                 |
+| Selection                | Explicit video/audio combinations, including alternate audio languages                                                                                                    |
+| Addressing               | SegmentTemplate with mandatory initialization; Number/Time/RepresentationID/Bandwidth substitutions                                                                       |
+| Timing                   | Fixed duration or contiguous zero-based SegmentTimeline; finite bounded repeats including r=-1; exact aligned terminal boundaries                                         |
+| URL/template inheritance | Single BaseURL per level and inherited SegmentTemplate attributes/timeline                                                                                                |
+| Unsupported              | Live/dynamic, DRM/encryption, multiple Periods, SegmentBase/SegmentList/ranges, nonzero offsets, gaps, terminal overlaps requiring clipping, subtitles, unknown semantics |
 
 The same object validation and offline retry policies as HLS apply. Both `ffmpeg`
 and `ffprobe` must be on PATH. DASH temporarily uses additional local space for
-seekable track copies; ordinary cleanup removes staging. A process kill during
+seekable track copies and a private muxed MP4 before copying to the owned destination; ordinary cleanup removes staging. Staged-track and final durations must match the Period to ffprobe precision. A process kill during
 muxing can leave a private `.idm-mux-*` directory beside the output for inspection.
 Cached resources remain until explicit discard or history removal. Existing
 partial ownership and exclusive publication protections remain in force.

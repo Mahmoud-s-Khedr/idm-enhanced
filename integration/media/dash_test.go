@@ -4,6 +4,7 @@ package media_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/media"
 )
 
 func TestRealDASHSelectedTracksAndOfflineAssembly(t *testing.T) {
@@ -121,6 +123,56 @@ func TestRealDASHSelectedTracksAndOfflineAssembly(t *testing.T) {
 			}
 			if _, err = os.Stat(destination); err != nil {
 				t.Fatal("history removal deleted output", err)
+			}
+		})
+	}
+}
+
+func TestRealDASHRejectsPresentationTailBeforePublication(t *testing.T) {
+	root, err := filepath.Abs("../../testdata/dash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "manifest.mpd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"terminal-overlap", "encoded-duration"} {
+		t.Run(mode, func(t *testing.T) {
+			body := strings.Replace(string(data), "PT2.0S", "PT1.5S", 1)
+			if mode == "encoded-duration" {
+				body = strings.NewReplacer("PT2.0S", "PT1.0S", `d="10240" r="1"`, `d="5120" r="1"`, `d="44032"`, `d="22016"`, `d="44168"`, `d="22084"`).Replace(string(data))
+			}
+			files := http.FileServer(http.Dir(root))
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/bad.mpd" {
+					http.ServeContent(w, r, "manifest", time.Time{}, strings.NewReader(body))
+					return
+				}
+				files.ServeHTTP(w, r)
+			}))
+			defer server.Close()
+			m, err := manager.Open(t.TempDir(), false, server.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = m.Close() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			destination := filepath.Join(t.TempDir(), "must-not-publish.mp4")
+			j, err := m.Create(ctx, manager.Options{Kind: "dash", URL: server.URL + "/bad.mpd", Destination: destination})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = m.Run(ctx, j.ID, false, nil); !errors.Is(err, media.ErrUnsupported) {
+				t.Fatal("accepted incompatible presentation", err)
+			}
+			if _, err = os.Stat(destination); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("published presentation tail", err)
+			}
+			jobs, err := m.Status(ctx)
+			if err != nil || len(jobs) != 1 || jobs[0].State != "needs_attention" {
+				t.Fatal(jobs, err)
 			}
 		})
 	}

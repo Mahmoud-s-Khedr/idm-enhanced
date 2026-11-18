@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const probeGood = `{"streams":[{"codec_type":"video","codec_name":"h264"},{"codec_type":"audio","codec_name":"aac"}],"format":{"duration":"1.0","size":"64"}}`
+const probeGood = `{"streams":[{"codec_type":"video","codec_name":"h264","duration":"1.0","start_time":"0.0"},{"codec_type":"audio","codec_name":"aac","duration":"1.0","start_time":"0.0"}],"format":{"duration":"1.0","size":"64"}}`
 
 func TestMain(m *testing.M) {
 	if os.Getenv("IDM_MEDIA_TOOL_HELPER") == "1" {
@@ -48,7 +48,14 @@ func TestMain(m *testing.M) {
 			if mode == "oversized" {
 				data = bytes.Repeat([]byte("x"), 17<<20)
 			}
-			if _, err := os.Stdout.Write(data); err != nil {
+			if dash {
+				if !strings.Contains(args, "-use_editlist 1 -movie_timescale 1000000 -fs") || !strings.Contains(args, "-n -f mp4") {
+					os.Exit(9)
+				}
+				if err := os.WriteFile(os.Args[len(os.Args)-1], data, 0600); err != nil {
+					os.Exit(7)
+				}
+			} else if _, err := os.Stdout.Write(data); err != nil {
 				os.Exit(7)
 			}
 		} else {
@@ -64,7 +71,13 @@ func TestMain(m *testing.M) {
 				if strings.Contains(args, "1.mp4") {
 					codec, kind = "aac", "audio"
 				}
-				data = fmt.Sprintf(`{"streams":[{"codec_type":%q,"codec_name":%q}],"format":{"duration":"1.0","size":"64"}}`, kind, codec)
+				data = fmt.Sprintf(`{"streams":[{"codec_type":%q,"codec_name":%q,"duration":"1.0","start_time":"0.0"}],"format":{"duration":"1.0","size":"64"}}`, kind, codec)
+			}
+			if mode == "stream_duration" {
+				data = strings.Replace(data, `"duration":"1.0"`, `"duration":"0.5"`, 1)
+			}
+			if mode == "output_duration" && !strings.Contains(args, ".idm-mux-") {
+				data = strings.ReplaceAll(data, "1.0", "1.5")
 			}
 			if mode == "bad_json" {
 				data = "{"
@@ -163,7 +176,7 @@ func TestAssemblyOfflineProtocolsValidationAndFailureRetention(t *testing.T) {
 	}
 }
 func TestOutputRejectsUnsupportedOrEmptyMedia(t *testing.T) {
-	for _, value := range []string{"{}", "{", strings.Replace(probeGood, "1.0", "NaN", 1), strings.Replace(probeGood, "1.0", "Inf", 1), strings.Replace(probeGood, "1.0", "0", 1), strings.Replace(probeGood, "64", "bad", 1), strings.Replace(probeGood, "64", "0", 1), strings.Replace(probeGood, "h264", "hevc", 1), strings.Replace(probeGood, "audio", "video", 1), strings.Replace(probeGood, "aac", "unknown", 1)} {
+	for _, value := range []string{"{}", "{", strings.Replace(probeGood, `"format":{"duration":"1.0"`, `"format":{"duration":"NaN"`, 1), strings.Replace(probeGood, `"format":{"duration":"1.0"`, `"format":{"duration":"Inf"`, 1), strings.Replace(probeGood, `"format":{"duration":"1.0"`, `"format":{"duration":"0"`, 1), strings.Replace(probeGood, "64", "bad", 1), strings.Replace(probeGood, "64", "0", 1), strings.Replace(probeGood, "h264", "hevc", 1), strings.Replace(probeGood, "audio", "video", 1), strings.Replace(probeGood, "aac", "unknown", 1)} {
 		if err := validateOutput([]byte(value)); err == nil {
 			t.Fatal("accepted invalid output", value)
 		}
@@ -190,7 +203,7 @@ func TestObjectSizeBoundAndWriterErrors(t *testing.T) {
 
 func TestDASHMuxLocalFilesAndCleanup(t *testing.T) {
 	binaries := fakeTools(t)
-	for _, mode := range []string{"ok", "ffmpeg_error", "bad_magic", "bad_codec", "hang"} {
+	for _, mode := range []string{"ok", "ffmpeg_error", "bad_magic", "bad_codec", "hang", "output_duration", "oversized", "stream_duration"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("IDM_MEDIA_TOOL_MODE", mode)
 			directory := t.TempDir()
@@ -205,7 +218,7 @@ func TestDASHMuxLocalFilesAndCleanup(t *testing.T) {
 				ctx, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
 				defer cancel()
 			}
-			tracks := []TrackInput{{Reader: strings.NewReader("initvideo"), Bytes: 9, Kind: "video"}, {Reader: strings.NewReader("initaudio"), Bytes: 9, Kind: "audio"}}
+			tracks := []TrackInput{{Reader: strings.NewReader("initvideo"), Bytes: 9, Kind: "video", Duration: 1}, {Reader: strings.NewReader("initaudio"), Bytes: 9, Kind: "audio", Duration: 1}}
 			err = assembleTracks(ctx, tracks, out, binaries)
 			if (err == nil) != (mode == "ok") {
 				t.Fatal(mode, err)
@@ -222,7 +235,7 @@ func TestDASHMuxLocalFilesAndCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = out.Close() }()
-	for _, tracks := range [][]TrackInput{nil, {{Reader: nil, Bytes: 1, Kind: "video"}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "subtitle"}}, {{Reader: strings.NewReader("x"), Bytes: 2, Kind: "video"}}, {{Reader: strings.NewReader("xx"), Bytes: 1, Kind: "video"}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "video"}, {Reader: strings.NewReader("x"), Bytes: 1, Kind: "video"}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "audio"}}} {
+	for _, tracks := range [][]TrackInput{nil, {{Reader: nil, Bytes: 1, Kind: "video", Duration: 1}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "subtitle", Duration: 1}}, {{Reader: strings.NewReader("x"), Bytes: 2, Kind: "video", Duration: 1}}, {{Reader: strings.NewReader("xx"), Bytes: 1, Kind: "video", Duration: 1}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "video", Duration: 1}, {Reader: strings.NewReader("x"), Bytes: 1, Kind: "video", Duration: 1}}, {{Reader: strings.NewReader("x"), Bytes: 1, Kind: "audio", Duration: 1}}} {
 		if err := assembleTracks(context.Background(), tracks, out, binaries); err == nil {
 			t.Fatal("accepted invalid input/mismatched streams", tracks)
 		}

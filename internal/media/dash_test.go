@@ -142,8 +142,8 @@ func TestDASHFractionalDurationsUseExactPeriodTicks(t *testing.T) {
 		{"PT0H0M1.10S", "100", "110", 2},
 		{"PT0.1S", "10", "1", 2},
 		{"PT0.000000001S", "1000000000", "1", 2},
-		// A real fractional tick still rounds upward and requires a second fragment.
-		{"PT1.1001S", "100", "110", 3},
+		// Fractional ticks still round upward, but cannot preserve an exact end.
+		{"PT1.1001S", "100", "110", 0},
 	} {
 		t.Run(test.duration, func(t *testing.T) {
 			base := strings.Replace(simpleMPD, `PT3S`, test.duration, 1)
@@ -155,7 +155,11 @@ func TestDASHFractionalDurationsUseExactPeriodTicks(t *testing.T) {
 					body = strings.Replace(body, `media="$RepresentationID$-$Number%03d$.m4s"/>`, `media="$RepresentationID$-$Number%03d$.m4s"><SegmentTimeline><S d="`+test.segment+`" r="-1"/></SegmentTimeline></SegmentTemplate>`, 1)
 				}
 				plans, err := ParseDASH([]byte(body), "https://example.invalid/index.mpd")
-				if err != nil || len(plans) != 1 || len(plans[0].Segments) != test.objects {
+				if test.objects == 0 {
+					if !errors.Is(err, ErrUnsupported) {
+						t.Fatal("accepted unaligned period", err)
+					}
+				} else if err != nil || len(plans) != 1 || len(plans[0].Segments) != test.objects {
 					t.Fatal(timeline, plans, err)
 				}
 			}
@@ -167,5 +171,26 @@ func TestDASHFractionalDurationsUseExactPeriodTicks(t *testing.T) {
 				t.Fatal("wrong exact finite timeline boundary", err)
 			}
 		})
+	}
+}
+
+func TestDASHRejectsTerminalOverlapAndPreservesExactCeiling(t *testing.T) {
+	duration, err := parseDuration("PT1.1001S")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticks, aligned := dashEndTick(duration, 100)
+	if ticks != 111 || aligned {
+		t.Fatal(ticks, aligned)
+	}
+	for _, timeline := range []string{"", `<SegmentTimeline><S d="10" r="2"/></SegmentTimeline>`, `<SegmentTimeline><S d="10" r="-1"/></SegmentTimeline>`} {
+		body := strings.Replace(simpleMPD, "PT3S", "PT2.5S", 1)
+		if timeline != "" {
+			body = strings.Replace(body, ` duration="10"`, "", 1)
+			body = strings.Replace(body, `media="$RepresentationID$-$Number%03d$.m4s"/>`, `media="$RepresentationID$-$Number%03d$.m4s">`+timeline+`</SegmentTemplate>`, 1)
+		}
+		if _, err := ParseDASH([]byte(body), "https://example.invalid"); !errors.Is(err, ErrUnsupported) {
+			t.Fatal("accepted terminal overlap", timeline, err)
+		}
 	}
 }
