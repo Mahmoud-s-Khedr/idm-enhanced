@@ -132,7 +132,9 @@ export function JobList({
                 <button
                   disabled={running}
                   aria-expanded={cancelID === j.id}
-                  aria-controls={`retention-${j.id}`}
+                  aria-controls={
+                    cancelID === j.id ? `retention-${j.id}` : undefined
+                  }
                   onClick={(event) => {
                     cancelTrigger.current = event.currentTarget;
                     setCancelID(j.id);
