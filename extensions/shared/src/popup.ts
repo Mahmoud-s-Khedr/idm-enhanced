@@ -11,8 +11,10 @@ const send = (
   host: string,
   message: Parameters<typeof api.runtime.sendNativeMessage>[1],
 ) => api.runtime.sendNativeMessage(host, message);
+let interacting = false;
 async function show(operation: () => Promise<string>) {
   if (!status || !button || !retry) return;
+  interacting = true;
   document.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
     b.disabled = true;
   });
@@ -37,6 +39,7 @@ async function submit(reuse: boolean): Promise<string> {
   const saved = await pending();
   const url = document.querySelector<HTMLInputElement>('#url');
   const name = document.querySelector<HTMLInputElement>('#filename');
+  if (reuse && !saved) throw new Error('No saved handoff to retry');
   const request =
     reuse && saved
       ? saved.request
@@ -61,10 +64,10 @@ retry.addEventListener('click', () => {
 });
 void pending()
   .then((saved) => {
-    if (saved && status) status.textContent = saved.status;
+    if (saved && status && !interacting) status.textContent = saved.status;
   })
   .catch(() => {
-    if (status)
+    if (status && !interacting)
       status.textContent =
         'Extension storage unavailable. Check browser permissions.';
   });

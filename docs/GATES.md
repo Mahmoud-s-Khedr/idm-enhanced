@@ -43,11 +43,9 @@ Linux interactive UI evidence is user-observed; automated browser evidence is
 headless and is recorded separately. A local green check cannot establish native
 Windows/macOS build results or hosted branch protection.
 
-Application IPC coverage is active on Linux. Windows/macOS currently expose only
-unsupported-platform IPC stubs, so their live-IPC coverage suite is explicitly not
-applicable until M5. The runner reports this platform skip; it still requires
-protocol coverage and the native-host subprocess framing/error tests. This follows
-the approved platform scope, and does not exempt any Linux IPC code from 80%.
+Application IPC coverage is active on Linux, macOS and Windows. Native fixtures
+exercise Unix sockets or the Windows per-user pipe. The earlier non-Linux stub
+exemption was removed in M5; framing and native-host process tests remain required.
 
 The dependency gate retains high/critical enforcement and has one expiring,
 version- and development-scope-specific applicability review for

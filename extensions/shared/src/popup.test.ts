@@ -121,3 +121,14 @@ test('shows saved outcome after popup reopen', async () => {
     ),
   );
 });
+
+test('empty retry does not send a new download', async () => {
+  await popup();
+  document.querySelector<HTMLButtonElement>('#retry')?.click();
+  await vi.waitFor(() =>
+    expect(document.querySelector('output')?.textContent).toContain(
+      'No saved handoff',
+    ),
+  );
+  expect(send).not.toHaveBeenCalled();
+});

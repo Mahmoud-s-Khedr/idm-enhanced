@@ -17,13 +17,39 @@ installation ownership, supported inputs and distribution limits.
 
 ## Validation status
 
-Final local and hosted evidence will be recorded here before protected merge.
-Required commands are doctor, check, check:full, gate-probes, real desktop smoke,
-real Linux browser smoke and native/package CI. New deterministic fixtures cover
-atomic receipt rollback, schema-3 upgrade, receipt retention after history removal,
-request conflicts, concurrent duplicate admission, filename/collision bounds,
-closed/sleeping sessions, and native-host process handoff through the real manager
-and final output. Critical M2/M3 recovery tests remain active.
+The following passed locally on Fedora 45 amd64 with pinned tools:
+
+- `go run ./tools/quality doctor`
+- `go run ./tools/quality check`
+- `go run ./tools/quality check:full` (including race, integration, secrets,
+  host-target and Windows-target vulnerability scans)
+- `go run ./tools/quality gate-probes` (20 rejection/integrity checks)
+- `go run ./tools/quality task desktop-smoke` (real native WebView/Wails)
+- `go run ./tools/quality task browser-smoke` (isolated production desktop,
+  Firefox 160.0 and Chromium 157.0.8103.78, actual native-message handoff/retry,
+  exactly two durable queued records)
+- `go test -tags=integration -count=1 -run TestNativeHostDownloadHandoff ./integration`
+- `git diff --check`
+
+Statement coverage: engine 96.1%, manager 92.9%, storage 92.1%, desktop 93.2%,
+protocol 96.6%, IPC 87.5%, registration 81.0%. All handwritten frontend modules
+meet unchanged per-file thresholds. Desktop assets remain 258,792 raw / 83,314
+gzip bytes; extension assets are 6,152 raw / 2,919 gzip bytes per browser, within
+unchanged budgets. Gitleaks and host/Windows-target govulncheck found no findings.
+The existing reviewed development-only picomatch applicability exception remains
+visible and expires 2026-12-01; no thresholds or exclusions were weakened.
+
+New deterministic fixtures cover atomic receipt rollback, schema-3 upgrade,
+receipt retention after history removal, request conflicts, concurrent duplicate
+admission, filename/collision bounds, closed/sleeping sessions, and native-host
+process handoff through the real manager to exact verified output. Critical
+M2/M3 recovery tests remain active. Migration fixtures remove newer tables when
+reconstructing released schemas; future-version rejection advances to schema 5.
+
+Initial hosted run 44296154157 exposed Git checkout trust for Go VCS stamping in
+root-run distro containers. CI now explicitly trusts only its mounted workspace
+and diagnoses Git status, keeping VCS stamping enabled. Native package/installer
+results and final-head protected checks remain required before acceptance.
 
 ## Support boundary
 

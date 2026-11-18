@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -230,12 +231,20 @@ func probes() error {
 		}
 		fmt.Fprintln(&report, "PASS rejected go-"+mode)
 	}
-	for _, result := range []string{"failure", "cancelled", "skipped", ""} {
-		c := exec.Command(binaryPath, "task", "aggregate")
-		c.Dir = dir
-		c.Env = append(os.Environ(), `QUALITY_NEEDS={"quality":{"result":"success"},"native":{"result":"`+result+`"},"linux-packages":{"result":"success"}}`)
-		if e = c.Run(); e == nil {
-			return errors.New("CI aggregate accepted non-success")
+	for _, job := range []string{"native", "linux-packages"} {
+		for _, result := range []string{"failure", "cancelled", "skipped", ""} {
+			needs := map[string]map[string]string{"quality": {"result": "success"}, "native": {"result": "success"}, "linux-packages": {"result": "success"}}
+			needs[job]["result"] = result
+			data, err := json.Marshal(needs)
+			if err != nil {
+				return err
+			}
+			c := exec.Command(binaryPath, "task", "aggregate")
+			c.Dir = dir
+			c.Env = append(os.Environ(), "QUALITY_NEEDS="+string(data))
+			if e = c.Run(); e == nil {
+				return errors.New("CI aggregate accepted non-success")
+			}
 		}
 	}
 	fmt.Fprintln(&report, "PASS CI aggregation rejects failed/cancelled/skipped/missing results")

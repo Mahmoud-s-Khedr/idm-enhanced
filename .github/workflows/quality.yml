@@ -92,6 +92,10 @@ jobs:
             dnf install -y git ca-certificates curl gcc gcc-c++ pkgconf-pkg-config gtk4-devel webkitgtk6.0-devel rpm-build
           fi
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Trust the mounted checkout for VCS stamping
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --short
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
