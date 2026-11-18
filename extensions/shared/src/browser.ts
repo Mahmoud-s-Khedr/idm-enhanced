@@ -36,6 +36,7 @@ export const api = typeof browser === 'undefined' ? chrome : browser;
 export interface Pending {
   request: Message;
   status: string;
+  accepted: boolean;
 }
 export async function pending(): Promise<Pending | undefined> {
   const value = (await api.storage.local.get('handoff')).handoff;
@@ -72,5 +73,6 @@ export async function pending(): Promise<Pending | undefined> {
       filename: r.filename,
     },
     status: value.status,
+    accepted: 'accepted' in value && value.accepted === true,
   };
 }

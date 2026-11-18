@@ -53,7 +53,7 @@ func (m *Manager) AcceptBrowser(ctx context.Context, request protocol.Message, d
 		dest := filepath.Join(directory, name)
 		occupied := false
 		for _, j := range jobs {
-			if j.Destination == dest && j.State != "cancelled" && j.State != "completed" {
+			if sameDestination(j.Destination, dest) && j.State != "cancelled" && j.State != "completed" {
 				occupied = true
 				break
 			}

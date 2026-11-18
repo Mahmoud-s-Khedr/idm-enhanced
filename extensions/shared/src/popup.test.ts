@@ -13,6 +13,11 @@ afterEach(() => {
 });
 async function popup(firefox = false, saved: unknown = {}) {
   document.body.innerHTML = html;
+  vi.stubGlobal('navigator', {
+    locks: {
+      request: async (_name: string, fn: () => Promise<unknown>) => fn(),
+    },
+  });
   get.mockResolvedValue(saved);
   set.mockResolvedValue(undefined);
   badge.mockResolvedValue(undefined);

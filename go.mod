@@ -7,6 +7,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/wailsapp/wails/v3 v3.0.0
 	golang.org/x/sys v0.49.0
+	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.62.0
 )
 

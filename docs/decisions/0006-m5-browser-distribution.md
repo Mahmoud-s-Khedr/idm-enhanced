@@ -41,7 +41,11 @@ queue direct URLs. The latest request is saved before sending and can be retried
 from the popup with its original ID after a lost acknowledgement. A badge directs
 context-menu users to the popup for the saved outcome. Browser storage holds the
 latest URL, potentially including a signed query, until replaced; it is never
-logged or sent to an external service. This is not a multi-request retry inbox.
+logged or sent to an external service. This is not a multi-request retry inbox. Shared Web Locks serialize persistence
+across popup and background contexts. A reply can update only its own current
+request, and a late failure cannot erase a known durable acknowledgement. Locks
+are released before waiting for native messaging; no browser permission or new
+library is added.
 Authenticated browser sessions, POST, blob/data URLs, automatic interception and
 media manifests remain unsupported; keep those downloads in the browser.
 
@@ -72,8 +76,19 @@ platform code. Microsoft's library is MIT licensed, maintained upstream, and use
 the existing golang.org/x/sys dependency. It adds one module, no new independent
 transitive modules, and no Linux/macOS runtime code. Its Windows footprint is
 included in the native binary/installer artifacts. The Windows-target vulnerability
-scan is required alongside the host-target scan. Existing runtime dependencies
-remain unchanged.
+scan is required alongside the host-target scan. Add golang.org/x/text v0.44.0 for NFC normalization in manager destination
+reservations, alongside Unicode case folding. The standard library has case
+folding but no canonical Unicode normalization; hand-maintained mappings or new
+platform-specific C APIs would be incomplete or add unnecessary platform code.
+This Go-maintained BSD-3-Clause module adds about 123 KiB (0.5%) to the measured
+Linux desktop executable: 24,609,704 to 24,732,688 bytes. Its graph advances the
+existing test/tool-only x/sync dependency from v0.24.0 to v0.25.0; no additional
+application runtime module is introduced beyond x/text. Frontend assets are
+unaffected. Reservations intentionally treat canonical/case equivalents as
+collisions on all filesystems, including case-sensitive Linux, to provide a
+consistent portable policy. Direct CLI/desktop admission uses the same manager
+comparison as browser naming. Existing files still use filesystem existence
+checks and exclusive finalization. No existing dependency pin is otherwise changed.
 
 ## Installers and CI
 
@@ -110,3 +125,7 @@ support, signing, OS reputation, or every distribution version.
 - [Firefox background modules](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Background_scripts)
 - [go-winio source and license](https://github.com/microsoft/go-winio/tree/v0.6.2)
 - [Inno Setup documentation](https://jrsoftware.org/ishelp/)
+
+- [Web Locks across same-origin windows and workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)
+
+- [Go Unicode normalization](https://pkg.go.dev/golang.org/x/text/unicode/norm)

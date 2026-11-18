@@ -165,7 +165,8 @@ the current support boundary; sandboxed Flatpak/Snap browsers are unverified.
 Right-click an HTTP(S) link and choose **Download with IDM Enhanced**, or enter a
 URL in the extension popup. Acknowledgement means the job is durably queued in
 `~/Downloads` (Windows: the user profile's Downloads directory). Open the desktop
-and choose Run queue. Files are never overwritten; collisions get numbered names.
+and choose Run queue. Files are never overwritten; queued case-equivalent and Unicode-equivalent names
+are reserved consistently across platforms, with numbered browser collision names.
 The extension saves the latest request and shows context-menu results through its
 badge/popup. **Retry last handoff** reuses its request ID, including after a lost
 acknowledgement or app restart. Do not submit a new request to retry the old one.

@@ -28,5 +28,5 @@ test('reads only well formed saved requests', async () => {
     },
   };
   get.mockResolvedValue({ handoff });
-  expect(await pending()).toEqual(handoff);
+  expect(await pending()).toEqual({ ...handoff, accepted: false });
 });

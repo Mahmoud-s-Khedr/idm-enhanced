@@ -1,5 +1,6 @@
 import { api } from './browser';
 import { downloadRequest, handoff } from './handoff';
+import { saveRequest, finishRequest } from './handoff-state';
 api.runtime.onInstalled.addListener(() => {
   api.contextMenus.create({
     id: 'download',
@@ -9,32 +10,27 @@ api.runtime.onInstalled.addListener(() => {
   });
 });
 api.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId !== 'download' || !info.linkUrl) return;
+  const source = info.linkUrl;
+  if (info.menuItemId !== 'download' || !source) return;
   void (async () => {
-    const request = downloadRequest(info.linkUrl ?? '', '');
-    await api.storage.local.set({
-      handoff: {
-        request,
-        status:
-          'Awaiting desktop acknowledgement. Retry from the popup if interrupted.',
-      },
-    });
+    const request = downloadRequest(source, '');
+    await saveRequest(request);
     try {
       const status = await handoff(
         (host, m) => api.runtime.sendNativeMessage(host, m),
         request,
       );
-      await api.storage.local.set({ handoff: { request, status } });
-      await api.action.setBadgeText({ text: 'OK' });
+      if (await finishRequest(request, status, true))
+        await api.action.setBadgeText({ text: 'OK' });
     } catch {
-      await api.storage.local.set({
-        handoff: {
+      if (
+        await finishRequest(
           request,
-          status:
-            'Not acknowledged. Open IDM Enhanced, check registration, then retry this request from the popup. The browser link remains available.',
-        },
-      });
-      await api.action.setBadgeText({ text: '!' });
+          'Not acknowledged. Open IDM Enhanced, check registration, then retry this request from the popup. The browser link remains available.',
+          false,
+        )
+      )
+        await api.action.setBadgeText({ text: '!' });
     }
   })().catch(() => {
     void api.action.setBadgeText({ text: '!' });

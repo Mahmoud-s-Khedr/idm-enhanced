@@ -1,6 +1,7 @@
 import { testConnection } from './connection';
 import { api, pending } from './browser';
 import { downloadRequest, handoff } from './handoff';
+import { saveRequest, finishRequest } from './handoff-state';
 const button = document.querySelector<HTMLButtonElement>('#connect');
 const form = document.querySelector<HTMLFormElement>('form');
 const retry = document.querySelector<HTMLButtonElement>('#retry');
@@ -40,20 +41,25 @@ async function submit(reuse: boolean): Promise<string> {
   const url = document.querySelector<HTMLInputElement>('#url');
   const name = document.querySelector<HTMLInputElement>('#filename');
   if (reuse && !saved) throw new Error('No saved handoff to retry');
+  if (reuse && saved?.accepted) return saved.status;
   const request =
     reuse && saved
       ? saved.request
       : downloadRequest(url?.value ?? '', name?.value ?? '');
-  await api.storage.local.set({
-    handoff: {
+  await saveRequest(request);
+  try {
+    const result = await handoff(send, request);
+    if (await finishRequest(request, result, true))
+      await api.action.setBadgeText({ text: '' });
+    return result;
+  } catch (error: unknown) {
+    await finishRequest(
       request,
-      status: 'Awaiting acknowledgement. Retry this request if interrupted.',
-    },
-  });
-  const result = await handoff(send, request);
-  await api.storage.local.set({ handoff: { request, status: result } });
-  await api.action.setBadgeText({ text: '' });
-  return result;
+      'Not acknowledged. Open IDM Enhanced and retry this saved request.',
+      false,
+    );
+    throw error;
+  }
 }
 form.addEventListener('submit', (event) => {
   event.preventDefault();

@@ -34,7 +34,7 @@ The following passed locally on Fedora 45 amd64 with pinned tools:
 Statement coverage: engine 96.1%, manager 92.9%, storage 92.1%, desktop 93.2%,
 protocol 96.6%, IPC 87.5%, registration 81.0%. All handwritten frontend modules
 meet unchanged per-file thresholds. Desktop assets remain 258,792 raw / 83,314
-gzip bytes; extension assets are 6,152 raw / 2,919 gzip bytes per browser, within
+gzip bytes; extension assets are 6,486 raw / 3,048 gzip bytes per browser, within
 unchanged budgets. Gitleaks and host/Windows-target govulncheck found no findings.
 The existing reviewed development-only picomatch applicability exception remains
 visible and expires 2026-12-01; no thresholds or exclusions were weakened.
@@ -60,3 +60,30 @@ compatibility and native process tests. Firefox packages are unsigned and requir
 temporary loading until Mozilla signing; Chrome ZIP is loaded unpacked in developer
 mode. Browser stores, code signing, older OS versions, Flatpak/Snap browsers,
 physical power-event delivery and power-loss resilience are not established.
+
+## Review and native-fixture corrections
+
+Automated review identified an out-of-order context-menu reply overwriting the
+newer request's retry slot. Shared Web Locks now serialize storage changes across
+popup/background contexts; outcomes must match the current request, and a late
+failure cannot erase an accepted result. A deferred-response regression preserves
+the newer failure/ID after the older acknowledgement arrives; shared-state fixtures
+also cover interleaved writes and late timeout after acceptance. Real Firefox and
+Chromium smoke passed again with the locking implementation.
+
+Windows CI exposed test-time Go module lookup after the fixture changed
+USERPROFILE. The subprocess executable is now built before isolating its runtime
+home. This preserves offline checks rather than enabling module downloads in tests.
+
+A second review finding covered queued `File.zip`/`file.zip` collisions on
+case-insensitive volumes. The manager now shares NFC-normalized Unicode
+case-folded reservations across browser naming and CLI/desktop admission.
+Fixtures cover both case and composed/decomposed Unicode names before output
+allocation; the second browser job receives a numbered destination. This is
+intentionally conservative on case-sensitive volumes. The x/text dependency and
+measured executable impact are documented in ADR 0006.
+
+Hosted run 44296819095 passed Debian/Fedora native package installation,
+registration/unregister/uninstall/data retention and artifact upload, Windows
+native tests plus setup/uninstall/artifact upload, and macOS native checks.
+The final review corrections require a fresh final-head CI run before merge.

@@ -6,6 +6,7 @@ import (
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/protocol"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -138,5 +139,34 @@ func TestBrowserSessionLifecycle(t *testing.T) {
 	}
 	if _, err = m.AcceptBrowser(context.Background(), r, dir); err == nil {
 		t.Fatal("closed store")
+	}
+}
+
+func TestBrowserPortableDestinationReservation(t *testing.T) {
+	m, err := Open(t.TempDir(), false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = m.Close() }()
+	ctx := context.Background()
+	dir := t.TempDir()
+	for _, pair := range [][2]string{{"File.zip", "file.zip"}, {"é.zip", "e\u0301.zip"}} {
+		request := protocol.Message{Version: 1, ID: "first-" + fmt.Sprint(len(pair[0])), Type: "download", URL: "https://example.invalid/file", Filename: pair[0]}
+		if _, err := m.AcceptBrowser(ctx, request, dir); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.Create(ctx, Options{URL: request.URL, Destination: filepath.Join(dir, pair[1])}); err == nil {
+			t.Fatal("desktop/CLI bypassed reservation")
+		}
+		request.ID = "second-" + fmt.Sprint(len(pair[0]))
+		request.Filename = pair[1]
+		id, err := m.AcceptBrowser(ctx, request, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		j, err := m.store.Get(ctx, id)
+		if err != nil || !strings.Contains(j.Destination, " (1).zip") {
+			t.Fatal(j, err)
+		}
 	}
 }

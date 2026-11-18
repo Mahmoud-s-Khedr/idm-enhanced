@@ -19,6 +19,7 @@ export default defineConfig({
         'extensions/shared/src/handoff.ts',
         'extensions/shared/src/browser.ts',
         'extensions/shared/src/background.ts',
+        'extensions/shared/src/handoff-state.ts',
       ],
       thresholds: {
         perFile: true,
