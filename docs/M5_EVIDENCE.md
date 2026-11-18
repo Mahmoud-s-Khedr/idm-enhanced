@@ -1,7 +1,8 @@
 # M5: Browser integration and alpha installable artifacts
 
-Updated: 2026-11-18. Implementation is in progress; final checks and protected
-merge are required before acceptance.
+Updated: 2026-11-18. Implementation is complete. Protected acceptance is determined
+by [PR #7](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/7)'s final required checks
+and merge record. M6 is the next milestone after that merge.
 
 M4 PR #6 merged as `02e7fb3` after final-head Quality run 44288012297 passed
 quality, Linux/Windows/macOS native jobs and the strict protected aggregate.

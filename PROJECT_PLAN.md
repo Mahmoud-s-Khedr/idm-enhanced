@@ -1,6 +1,6 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M4 accepted; M5 browser handoff and alpha installers implemented, validation in progress
+Status: M0–M4 accepted; M5 implementation complete, acceptance follows PR #7 protected merge; M6 core beta hardening is next
 
 Date: 2026-11-16
 
