@@ -102,3 +102,17 @@ open it. Native notification availability depends on OS permission/environment;
 unsigned macOS builds can be unavailable and show the history fallback. Speed/ETA,
 batch import and richer category polish remain beta follow-ups. Browser download
 handoff is M5; media remains M7/M8. No performance speedup or power-loss claim.
+
+## Hosted regression correction
+
+Initial run 44217616398 built successfully on Windows, then exposed an M3
+`TestRetries/cancel_wait` fixture race: its 30 ms deadline could expire before
+the first HTTP request, yielding zero requests instead of testing cancellation
+during backoff. The fixture now observes persisted `retry_wait` before cancelling,
+uses a long server Retry-After within the supported automatic window, and retains
+exactly-one-request and paused-state assertions while additionally requiring
+`context.Canceled`. A bounded five-second setup deadline fails if the intended
+state is never reached. This changes test synchronization, not transfer behavior,
+retry policy, thresholds or required jobs.
+`go test -race -count=25 -run '^TestRetries$' ./internal/manager` passed, followed
+by another full canonical check. Final-head hosted checks remain required.
