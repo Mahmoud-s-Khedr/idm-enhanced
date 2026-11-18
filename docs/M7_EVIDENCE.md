@@ -1,7 +1,8 @@
 # M7: Bounded HLS VOD media
 
-Updated: 2026-11-18. Supported-profile implementation is under final validation;
-protected acceptance follows its PR's exact-head required checks and merge.
+Updated: 2026-11-19. Supported-profile implementation is complete; protected
+acceptance is tracked in [PR #9](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/9),
+which records the final head, required checks, artifact verification and merge.
 
 M6 PR #8 merged as 0acec4abf9e8fee1b427c427ecffa261bcac4e9b after final head
 2d7fb98a1175ab363a4d8130705746e122f2de2e passed
@@ -85,6 +86,24 @@ requires the exact PR head's required checks before protected merge.
 No Go/JS dependency, threshold reduction, budget increase or required-job bypass
 is introduced. FFmpeg is separately installed and not bundled; the full gate
 requires real media tools rather than silently skipping playback tests.
+
+## Protected validation and review
+
+Initial head 2d9c9901155bebf0b68cde132808c19e9d45f3cd passed
+[Quality run 44359948011](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44359948011),
+including all three native platforms and Debian/Fedora/Windows controlled
+installer upgrades. All nine artifact hashes and six extension archives passed
+local checksum/version/background-entry verification. All 19 local gate probes
+passed, including staged-index preservation. The staged runner excludes only
+binary MPEG-TS fixtures from TypeScript lint, matching the formatter/config scope.
+
+A late review found output-allocation errors were incorrectly classified as
+ownership failures. The fix preserves retryable assembly errors for allocation
+failures, while existing partial ownership failures remain explicit attention
+cases. A regression removes the output directory, completes segment downloads,
+then restores the directory and successfully retries assembly with the origin
+offline and no further requests. Final-head validation and protected merge are
+recorded in PR #9; the initial run is not evidence for the corrected head.
 
 ## Limits and pending acceptance
 

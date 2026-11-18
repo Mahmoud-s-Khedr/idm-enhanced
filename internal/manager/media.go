@@ -474,9 +474,12 @@ func (m *Manager) assembleMedia(ctx context.Context, j *Job, cp mediaCheckpoint)
 		output, err = m.allocate(ctx, j)
 	} else {
 		output, err = owned(*j, os.O_RDWR)
+		if err != nil {
+			err = errMediaOwnership
+		}
 	}
 	if err != nil {
-		return m.mediaFailure(j, errMediaOwnership)
+		return m.mediaFailure(j, err)
 	}
 	defer func() {
 		if output != nil {

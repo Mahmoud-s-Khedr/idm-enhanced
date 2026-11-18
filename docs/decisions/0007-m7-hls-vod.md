@@ -2,7 +2,7 @@
 
 Date: 2026-11-18
 
-Status: Implemented; acceptance requires final checks and protected PR merge.
+Status: Implemented; protected acceptance tracked in PR #9.
 M6 PR #8 merged as `0acec4abf9e8fee1b427c427ecffa261bcac4e9b` after final
 head `2d7fb98a1175ab363a4d8130705746e122f2de2e` passed run 44342722093.
 The owner explicitly deferred human beta testing and authorized moving to M7.

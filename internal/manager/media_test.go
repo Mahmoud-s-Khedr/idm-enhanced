@@ -786,3 +786,32 @@ func TestMediaCancellationAroundVerifiedCommitCanResumeOffline(t *testing.T) {
 		})
 	}
 }
+
+func TestMediaOutputAllocationFailureCanRetryOffline(t *testing.T) {
+	m, server, origin := mediaFixture(t)
+	j := mediaJob(t, m, server)
+	directory := filepath.Dir(j.Destination)
+	if err := os.Remove(directory); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := m.Run(ctx, j.ID, false, nil); err == nil {
+		t.Fatal("ignored output allocation failure")
+	}
+	saved := mediaSaved(t, m, j.ID)
+	if saved.State != "failed" || saved.Error != "media_assembly" || saved.MediaComplete != 3 || saved.Partial != "" {
+		t.Fatal(saved.State, saved.Error, saved.MediaComplete, saved.Partial)
+	}
+	requests := origin.requests.Load()
+	server.Close()
+	if err := os.Mkdir(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Run(ctx, j.ID, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if saved = mediaSaved(t, m, j.ID); saved.State != "completed" || origin.requests.Load() != requests {
+		t.Fatal(saved.State, origin.requests.Load(), requests)
+	}
+	assertMediaOutput(t, saved)
+}

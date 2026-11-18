@@ -1,6 +1,6 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M6 engineering merged; M7 supported-profile HLS implementation under validation; human beta acceptance deferred by the owner
+Status: M0–M6 engineering merged; M7 supported-profile HLS implemented (protected acceptance tracked in PR #9); human beta acceptance deferred by the owner
 
 Date: 2026-11-16
 
