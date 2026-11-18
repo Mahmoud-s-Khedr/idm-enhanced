@@ -2,7 +2,7 @@
 
 Date: 2026-11-19
 
-Status: Implemented; protected PR acceptance remains required. The owner authorized
+Status: Implemented; protected acceptance is tracked in [PR #10](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/10). The owner authorized
 M8 implementation and protected merge, with human beta workflows deferred until
 afterward. M7 PR #9 merged as 5c14ec3489c61dadd7b697361731148f3c7f097a after final
 head 2c24de51223a9ef31a947f3a3de69b34f0265e06 passed Quality run 44407355708.

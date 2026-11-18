@@ -1,7 +1,6 @@
 # M8: Bounded static DASH expansion
 
-Updated: 2026-11-19. Implementation is present; final canonical checks and protected
-merge are required before engineering acceptance. Human beta workflows are deferred
+Updated: 2026-11-19. Implementation and local validation are complete; [PR #10](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/10) records final-head hosted checks, artifact verification and protected merge for engineering acceptance. Human beta workflows are deferred
 by the owner until after M8 and are not claimed by automated evidence.
 
 M7 protected acceptance was read back from PR #9: merged as
@@ -50,7 +49,7 @@ The following passed on Fedora 45 amd64 with pinned tools:
 
 - `go run ./tools/quality doctor`
 - `go run ./tools/quality check`
-- `go run ./tools/quality gate-probes` (all 19 rejection/integrity probes, including staged-index preservation)
+- `go run ./tools/quality gate-probes` (all 20 recorded rejection/integrity checks, including staged-index preservation)
 - `go run ./tools/quality check:full` (ordinary checks, race, integration, real
   FFmpeg/ffprobe 9.0.2 media decode, secrets, host/Windows vulnerability scans and
   JavaScript dependency audit)
@@ -63,7 +62,7 @@ The following passed on Fedora 45 amd64 with pinned tools:
   (109,127 executions, no failures)
 - `git diff --check`
 
-Critical Go coverage: engine 96.1%, manager 91.2%, storage 92.3%, media 93.2%.
+Critical Go coverage: engine 96.1%, manager 91.3%, storage 92.3%, media 92.8%.
 The 48 TS tests pass; statements 98.23%, branches 92.39%, functions 99.05%,
 lines 99.18%; unchanged per-file gates also pass. Desktop assets: raw 262,742 /
 303,185 bytes, gzip 84,550 / 103,429. Each extension: raw 9,271 / 11,195,
@@ -77,7 +76,7 @@ workflow passed after that correction; no assertion or production behavior was
 weakened. Initial extension coverage required exercising the new DASH handoff
 branch; explicit same-request retry coverage was added and all gates passed.
 
-Final protected checks, gate probes and merge are tracked with the PR. Existing
+Final protected checks, artifact verification and merge are tracked with [PR #10](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/10). Existing
 thresholds, budgets, required jobs and dependencies are unchanged.
 
 ## Acceptance limits
