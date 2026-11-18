@@ -98,14 +98,16 @@ export function App() {
         interrupted jobs stay paused.
       </p>
       <p role="alert">{error}</p>
-      <p role="status">
-        {message ||
-          snapshot?.message ||
+      <p role="status" aria-label="Download session status">
+        {snapshot?.message ||
           (snapshot?.sleeping
             ? 'Downloads paused for sleep.'
             : snapshot?.running
               ? 'Downloads running'
               : 'Ready')}
+      </p>
+      <p role="status" aria-label="Command feedback">
+        {message}
       </p>
       {info?.notification && <p role="status">{info.notification}</p>}
       <div className="workspace">

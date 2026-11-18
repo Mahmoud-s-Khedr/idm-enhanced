@@ -145,3 +145,29 @@ test('shows sleep and manager errors without fabricated progress', async () => {
   );
   await screen.findByText('Some downloads need attention.');
 });
+
+test('keeps asynchronous failure and lifecycle status visible after command admission', async () => {
+  render(<App />);
+  await screen.findByText('archive.zip');
+  fireEvent.click(screen.getByRole('button', { name: 'Run queue' }));
+  await screen.findByText('Command accepted.');
+  vi.mocked(Service.Downloads).mockResolvedValue(
+    new Snapshot({
+      message: 'Some downloads need attention. Check their status and retry.',
+    }),
+  );
+  await screen.findByText(
+    'Some downloads need attention. Check their status and retry.',
+  );
+  expect(screen.getByLabelText('Command feedback')).toHaveTextContent(
+    'Command accepted.',
+  );
+  vi.mocked(Service.Downloads).mockResolvedValue(
+    new Snapshot({ running: true }),
+  );
+  await screen.findByText('Downloads running');
+  vi.mocked(Service.Downloads).mockResolvedValue(
+    new Snapshot({ sleeping: true }),
+  );
+  await screen.findByText('Downloads paused for sleep.');
+});

@@ -54,15 +54,15 @@ The following passed locally with pinned toolchains on Linux amd64:
 - `git diff --check`
 
 `go run ./tools/quality gate-probes` also passed all 20 rejection/integrity checks.
-Statement coverage: engine 96.1%, manager 93.1%, storage 91.1%, desktop 95.0%.
+Statement coverage: engine 95.7%, manager 93.1%, storage 91.3%, desktop 95.0%.
 Existing critical 90% and other 80% thresholds remain unchanged. Every new
 handwritten frontend module meets 80/80/80/75 per-file thresholds. Gitleaks and
 local-target govulncheck reported no findings. pnpm audit retained the existing
 reviewed development-only picomatch applicability exception until 2026-12-01;
 raw findings remain visible.
 
-Desktop JS/CSS: 258,682 raw bytes (budget 303,185), 83,292 gzip bytes (budget
-103,429). Linux amd64 native desktop executable: 24,570,432 bytes with the normal
+Desktop JS/CSS: 258,792 raw bytes (budget 303,185), 83,314 gzip bytes (budget
+103,429). Linux amd64 native desktop executable: 24,570,856 bytes with the normal
 trimpath build, including embedded frontend assets. This is an executable-size
 measurement, not installer size, startup/RSS measurement or a Windows toast cost
 measurement. No budget, exclusion or required CI job was weakened.
@@ -116,3 +116,22 @@ state is never reached. This changes test synchronization, not transfer behavior
 retry policy, thresholds or required jobs.
 `go test -race -count=25 -run '^TestRetries$' ./internal/manager` passed, followed
 by another full canonical check. Final-head hosted checks remain required.
+
+## Review correction
+
+Automated review found that persistent “Command accepted” feedback took priority
+over later manager failures and lifecycle updates. Command feedback and
+authoritative session status now render separately. A React regression admits a
+queue command, then delivers a later manager failure, running state and sleeping
+state, requiring each to remain visible alongside the admission acknowledgement.
+
+A later full integration rerun exposed a SQLite cancellation race: database/sql
+can return `sql.ErrTxDone` after its automatic rollback instead of the cancelled
+context cause. Storage now preserves both errors so manager/CLI interruption
+classification remains correct. A controlled SQL driver deterministically models
+that error, and 20 repeated race-enabled regression runs plus 20 real CLI process
+interruption runs passed. The transaction failure is retained; successful commits
+are never reclassified solely because cancellation happened afterward.
+
+After both corrections, `check:full` and the real native WebView smoke passed
+again locally. Final hosted checks independently validate the updated head.

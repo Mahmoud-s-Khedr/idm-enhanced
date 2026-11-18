@@ -19,6 +19,8 @@ within a drain still use M3's configured active-job limit. New enqueues await th
 next drain. A reserved run blocks destructive mutations before Manager.Run has
 entered, preventing an admission/removal race. Existing manager paths retain
 ownership of retries, checkpoints, identity validation and exclusive publication.
+Storage preserves the context cancellation cause alongside database/sql's
+automatic-rollback ErrTxDone so interruption is still classified as a pause.
 Queue cancellation/removal/reordering require Pause all and completion of the join.
 Individual Pause cancels an active job or pauses an idle queued job.
 

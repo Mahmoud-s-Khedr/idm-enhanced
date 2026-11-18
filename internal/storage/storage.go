@@ -181,7 +181,15 @@ func (s *Store) Close() error {
 func (s *Store) Save(ctx context.Context, j Job) error { return s.SaveBatch(ctx, []Job{j}) }
 
 // SaveBatch commits a manager-owned queue reorder atomically.
-func (s *Store) SaveBatch(ctx context.Context, jobs []Job) error {
+func (s *Store) SaveBatch(ctx context.Context, jobs []Job) (err error) {
+	// database/sql may win the cancellation race by rolling the transaction
+	// back before Commit, returning ErrTxDone instead of the context cause.
+	// Preserve both so callers still checkpoint/pause and classify interruption.
+	defer func() {
+		if errors.Is(err, sql.ErrTxDone) {
+			err = errors.Join(err, ctx.Err())
+		}
+	}()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
