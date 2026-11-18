@@ -58,7 +58,8 @@
     if (document.activeElement !== button('Cancel…'))
       throw new Error('Cancel dismissal lost keyboard focus');
     document.documentElement.style.fontSize = '200%';
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    // Reading scrollWidth forces current layout even when the compositor has
+    // stopped animation frames for an occluded window.
     if (document.documentElement.scrollWidth > window.innerWidth)
       throw new Error('Download controls overflow at 200% text size');
     document.documentElement.style.fontSize = '';

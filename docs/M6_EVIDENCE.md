@@ -79,6 +79,14 @@ source builds. Required final-head CI
 includes the existing quality, native and package jobs with stricter upgrade
 smoke; no new head inherits an earlier head's success.
 
+## Native harness correction
+
+A final-head rerun exposed a timeout in the new text-reflow check: waiting for
+requestAnimationFrame can stall for an occluded native window. The check now
+reads scrollWidth directly, forcing current layout without requiring a
+compositor frame. The real native WebView smoke passed after this correction;
+the earlier timeout is not counted as a passing run.
+
 ## Acceptance boundary
 
 See [support and recovery guide](SUPPORT.md) for the platform/source matrix,
