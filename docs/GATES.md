@@ -1,27 +1,27 @@
 # Gate rollout
 
-Current milestone: M5 browser handoff and alpha installers implemented; acceptance is tracked in M5_EVIDENCE.md. M4 PR #6 is merged. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M6 core hardening; M5 PR #7 is merged. Engineering evidence is tracked in M6_EVIDENCE.md; human beta acceptance is deferred. M4 PR #6 is merged. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
-| State              | Gate / task                                                                                                     | Activation                                                    |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| active             | versions, format, lint-go, lint-ts, types                                                                       | M0                                                            |
-| active             | deadcode (Knip), architecture (dependency-cruiser/depguard), clones (jscpd/dupl), test-clones (separate report) | M0                                                            |
-| active             | mod-drift, frozen pnpm bootstrap/CI installation                                                                | M0                                                            |
-| active             | test-go (80% per internal package), test-tools, test-ts (80/80/80/75 per file)                                  | M0                                                            |
-| active             | bindings (Go protocol generator and Wails generator), build, budgets                                            | M0                                                            |
-| active             | race (Linux amd64), integration (native-host subprocess framing/deadlines)                                      | M0 full                                                       |
-| active             | secrets, history-secrets, vuln (govulncheck and pnpm audit)                                                     | M0 full / CI                                                  |
-| active             | staged formatting/lint/whitespace/secrets, index-preservation probe                                             | M0 hook                                                       |
-| active             | aggregate rejects failed/cancelled/skipped/missing jobs                                                         | M0 CI                                                         |
-| active             | gate-probes in a disposable copy, with a clean baseline for each gate                                           | M0 CI                                                         |
-| active             | browser-smoke: real extension/native-host/IPC round trips using disposable Linux browser profiles               | M0 acceptance, requires running native app and local browsers |
-| active             | Windows/macOS native CI build and framing tests (passed; see M0 evidence)                                       | M0 acceptance                                                 |
-| active             | M1 engine/CLI 80% package coverage, deterministic HTTP fixtures and CLI process tests                           | M1                                                            |
-| active             | engine, manager, storage 90% package coverage; range/recovery/process-kill fixtures                             | M2                                                            |
-| not applicable yet | live Windows/macOS browser IPC and registration                                                                 | M5                                                            |
-| not applicable yet | installers, signing, media                                                                                      | corresponding release milestones                              |
+| State            | Gate / task                                                                                                     | Activation                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| active           | versions, format, lint-go, lint-ts, types                                                                       | M0                                                            |
+| active           | deadcode (Knip), architecture (dependency-cruiser/depguard), clones (jscpd/dupl), test-clones (separate report) | M0                                                            |
+| active           | mod-drift, frozen pnpm bootstrap/CI installation                                                                | M0                                                            |
+| active           | test-go (80% per internal package), test-tools, test-ts (80/80/80/75 per file)                                  | M0                                                            |
+| active           | bindings (Go protocol generator and Wails generator), build, budgets                                            | M0                                                            |
+| active           | race (Linux amd64), integration (native-host subprocess framing/deadlines)                                      | M0 full                                                       |
+| active           | secrets, history-secrets, vuln (govulncheck and pnpm audit)                                                     | M0 full / CI                                                  |
+| active           | staged formatting/lint/whitespace/secrets, index-preservation probe                                             | M0 hook                                                       |
+| active           | aggregate rejects failed/cancelled/skipped/missing jobs                                                         | M0 CI                                                         |
+| active           | gate-probes in a disposable copy, with a clean baseline for each gate                                           | M0 CI                                                         |
+| active           | browser-smoke: real extension/native-host/IPC round trips using disposable Linux browser profiles               | M0 acceptance, requires running native app and local browsers |
+| active           | Windows/macOS native CI build and framing tests (passed; see M0 evidence)                                       | M0 acceptance                                                 |
+| active           | M1 engine/CLI 80% package coverage, deterministic HTTP fixtures and CLI process tests                           | M1                                                            |
+| active           | engine, manager, storage 90% package coverage; range/recovery/process-kill fixtures                             | M2                                                            |
+| partly evidenced | Windows/macOS native IPC and registration fixtures active; live browser/UI acceptance pending                   | M5/M6                                                         |
+| active / pending | Debian/Fedora/Windows unsigned installers active; public signing and media pending                              | M5 packages; later release gates                              |
 
 M3 range-worker, shared-limit, queue, retry and parallel process-kill fixtures are active.
 SQLite migrations 001/002 and rollback/reopen/version/constraint tests are active in storage.
@@ -72,3 +72,12 @@ and Windows setup using Inno Setup 6.5.4. The aggregate requires the linux-packa
 matrix and native Windows installer checks. Artifacts include extension archives
 and SHA256SUMS. Display-dependent browser/desktop smoke remains explicit; native
 CI does not establish interactive Windows/macOS browser compatibility.
+
+## M6 activation
+
+Manager recovery hints, cancellation focus/Escape, accessible progress and native
+200% text reflow checks extend existing suites/thresholds. Required packaging
+jobs add controlled native version-upgrade and durable queue retention checks.
+Schema 4/checkpoint v1 and all recovery gates stay unchanged. Signing, live
+Windows/macOS browser/UI evidence and owner-deferred beta feedback remain
+release gates; see SUPPORT.md. No mandatory job or threshold is relaxed.

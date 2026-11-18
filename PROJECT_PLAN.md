@@ -1,10 +1,10 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M4 accepted; M5 implementation complete, acceptance follows PR #7 protected merge; M6 core beta hardening is next
+Status: M0–M5 merged; M6 engineering hardening implemented (protected merge pending); human beta acceptance deferred by the owner
 
 Date: 2026-11-16
 
-Updated: 2026-11-18 — M5 implementation and validation tracked in docs/M5_EVIDENCE.md
+Updated: 2026-11-18 — M6 hardening tracked in docs/M6_EVIDENCE.md; support/recovery matrix in docs/SUPPORT.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 

@@ -18,6 +18,7 @@ type JobView struct {
 	Host        string `json:"host"`
 	State       string `json:"state"`
 	Error       string `json:"error"`
+	Guidance    string `json:"guidance"`
 	Bytes       int64  `json:"bytes"`
 	Total       int64  `json:"total"`
 	Order       int64  `json:"order"`
@@ -79,7 +80,7 @@ func (s *Service) Downloads() (Snapshot, error) {
 		if u, e := url.Parse(j.Source); e == nil {
 			host = u.Hostname()
 		}
-		out.Jobs = append(out.Jobs, JobView{ID: j.ID, Name: filepath.Base(j.Destination), Destination: j.Destination, Host: host, State: j.State, Error: manager.SafeError(j), Bytes: j.Durable, Total: j.Length, Order: j.QueueOrder, Scheduled: instant(j.ScheduledAt), RetryAt: instant(j.RetryAt)})
+		out.Jobs = append(out.Jobs, JobView{ID: j.ID, Name: filepath.Base(j.Destination), Destination: j.Destination, Host: host, State: j.State, Error: manager.SafeError(j), Guidance: manager.RecoveryHint(j), Bytes: j.Durable, Total: j.Length, Order: j.QueueOrder, Scheduled: instant(j.ScheduledAt), RetryAt: instant(j.RetryAt)})
 	}
 	return out, nil
 }
