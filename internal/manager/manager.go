@@ -679,6 +679,9 @@ func SafeError(j Job) string { return j.Error }
 // RecoveryHint gives adapters safe next steps without exposing source URLs or
 // treating an unsafe checkpoint as resumable. The manager remains authoritative.
 func RecoveryHint(j Job) string {
+	if j.Error == "remote_identity" && j.State != "needs_attention" {
+		return "Source inspection failed. Check the connection and source access, then Resume / retry. Saved progress will be checked before reuse."
+	}
 	if j.State == "needs_attention" && j.Error == "transfer" {
 		return "The server response cannot safely resume this file. Check the source, then Restart to discard saved progress."
 	}

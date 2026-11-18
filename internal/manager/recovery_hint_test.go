@@ -26,6 +26,9 @@ func TestRecoveryHintKeepsUnsafeResumeAndSecretsOutOfAdvice(t *testing.T) {
 	} {
 		t.Run(test.category, func(t *testing.T) {
 			j := Job{Error: test.category, Source: "https://example.invalid/?secret=private", Partial: "private-partial"}
+			if test.category == "remote_identity" {
+				j.State = "needs_attention"
+			}
 			hint := RecoveryHint(j)
 			if (test.category == "" && hint != "") || !strings.Contains(hint, test.next) {
 				t.Fatalf("unhelpful recovery advice: %q", hint)

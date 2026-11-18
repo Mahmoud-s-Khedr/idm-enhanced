@@ -87,6 +87,15 @@ reads scrollWidth directly, forcing current layout without requiring a
 compositor frame. The real native WebView smoke passed after this correction;
 the earlier timeout is not counted as a passing run.
 
+## Review correction
+
+Automated review identified that remote_identity also classifies transient
+resume-probe failures whose checkpoint remains valid. Advice now uses the saved
+state: failed probes recommend Resume / retry, while needs_attention identity
+changes retain Restart guidance. The existing network-error/HTTP-503 fixture
+asserts the advice, preserves the two committed bytes and successfully resumes
+without restarting. Focused manager/desktop race tests cover this correction.
+
 ## Acceptance boundary
 
 See [support and recovery guide](SUPPORT.md) for the platform/source matrix,

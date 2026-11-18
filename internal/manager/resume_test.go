@@ -905,6 +905,9 @@ func TestTransientProbeFailureCanResumeAgain(t *testing.T) {
 			if err != nil || saved.State != "failed" || saved.Durable != 2 {
 				t.Fatal("lost resumable progress", saved, err)
 			}
+			if hint := RecoveryHint(saved); !strings.Contains(hint, "Resume / retry") || strings.Contains(hint, "Restart") {
+				t.Fatal("transient probe failure advised discarding valid progress", hint)
+			}
 			m.client = http.DefaultClient
 			if err = m.Run(ctx, j.ID, false, nil); err != nil {
 				t.Fatal("temporary probe failure required restart", err)
