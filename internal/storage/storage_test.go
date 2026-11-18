@@ -96,7 +96,7 @@ func TestRepository(t *testing.T) {
 	if err = s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='transient'").Scan(&count); err != nil || count != 0 {
 		t.Fatal("migration did not roll back", err)
 	}
-	if _, err = s.db.Exec("PRAGMA user_version=2"); err != nil {
+	if _, err = s.db.Exec("PRAGMA user_version=3"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {
@@ -259,5 +259,69 @@ func TestReadOnlyPermissions(t *testing.T) {
 	}
 	if _, err = Open(dir, true); err == nil && os.PathSeparator != '\\' {
 		t.Fatal("unsafe status directory")
+	}
+}
+
+func TestM2UpgradeAndAtomicReorder(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := Open(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Rebuild the actual released M2 schema, then open it with M3.
+	if _, err = s.db.Exec("DROP TABLE jobs;" + migration); err != nil {
+		t.Fatal(err)
+	}
+	j := Job{Version: 1, ID: "legacy", State: "paused", Durable: 2, Intervals: []Interval{{Start: 0, End: 2, Digest: "digest"}}}
+	if err = s.Save(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ro, err := Open(dir, true)
+	if err != nil {
+		t.Fatal("M2 read-only status", err)
+	}
+	if err = ro.Close(); err != nil {
+		t.Fatal(err)
+	}
+	original := migrationM3
+	migrationM3 = "CREATE TABLE temporary_m3(x); invalid;"
+	if _, err = Open(dir, false); err == nil {
+		t.Fatal("broken migration accepted")
+	}
+	migrationM3 = original
+	s, err = Open(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	got, err := s.Get(ctx, j.ID)
+	if err != nil || got.Durable != 2 || len(got.Intervals) != 1 {
+		t.Fatal("upgrade lost checkpoint", got, err)
+	}
+	var version, count int
+	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+		t.Fatal(version, err)
+	}
+	if err = s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='temporary_m3'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("migration rollback", count, err)
+	}
+	got.State = "retry_wait"
+	got.QueueOrder = 4
+	if err = s.Save(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	changed := got
+	changed.QueueOrder = 1
+	invalid := Job{Version: 1, ID: "bad", State: "invalid"}
+	if err = s.SaveBatch(ctx, []Job{changed, invalid}); err == nil {
+		t.Fatal("invalid batch accepted")
+	}
+	saved, err := s.Get(ctx, j.ID)
+	if err != nil || saved.QueueOrder != 4 {
+		t.Fatal("partial reorder committed", saved, err)
 	}
 }

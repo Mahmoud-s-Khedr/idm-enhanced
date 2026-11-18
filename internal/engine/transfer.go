@@ -45,6 +45,8 @@ type Request struct {
 	Offset   int64
 	Identity Representation
 	Probe    bool
+	// End is exclusive; zero retains the open-ended M2 resume request.
+	End int64
 }
 
 var ErrUnsafeResume = errors.New("source cannot be safely resumed; explicit restart required")
@@ -77,11 +79,17 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 	}
 	req.Header.Set("Accept-Encoding", "identity")
 	if request.Resume {
-		if !StrongETag(request.Identity.ETag) {
+		if !StrongETag(request.Identity.ETag) || request.Offset < 0 || request.End < 0 {
 			return representation, ErrUnsafeResume
 		}
 		req.Header.Set("If-Range", request.Identity.ETag)
 		value := fmt.Sprintf("bytes=%d-", request.Offset)
+		if request.End > 0 {
+			if request.Offset < 0 || request.End <= request.Offset {
+				return representation, ErrUnsafeResume
+			}
+			value = fmt.Sprintf("bytes=%d-%d", request.Offset, request.End-1)
+		}
 		if request.Probe {
 			value = "bytes=0-0"
 		}
@@ -117,11 +125,11 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 		}
 	}()
 	if !request.Resume && resp.StatusCode != http.StatusOK {
-		return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
+		return representation, statusError(resp)
 	}
 	// Error-page encoding says nothing about the requested representation.
-	if request.Resume && resp.StatusCode >= 500 {
-		return representation, fmt.Errorf("server returned HTTP %d", resp.StatusCode)
+	if request.Resume && (resp.StatusCode >= 500 || resp.StatusCode == 429 || resp.StatusCode == 408) {
+		return representation, statusError(resp)
 	}
 	if encoding := resp.Header.Get("Content-Encoding"); len(resp.Header.Values("Content-Encoding")) > 1 || (encoding != "" && encoding != "identity") {
 		if request.Resume {
@@ -143,7 +151,7 @@ func Stream(ctx context.Context, client *http.Client, request Request, dst io.Wr
 		if request.Probe {
 			wantStart = 0
 		}
-		if resp.StatusCode != 206 || len(resp.Header.Values("Content-Range")) != 1 || !ok || start != wantStart || (!request.Probe && end != total-1) || (request.Probe && end != 0) || representation.ETag != request.Identity.ETag || representation.Effective != request.Identity.Effective || representation.Encoding != request.Identity.Encoding || (request.Identity.Length >= 0 && total != request.Identity.Length) || (resp.ContentLength >= 0 && resp.ContentLength != end-start+1) {
+		if resp.StatusCode != 206 || len(resp.Header.Values("Content-Range")) != 1 || !ok || start != wantStart || (!request.Probe && ((request.End == 0 && end != total-1) || (request.End > 0 && end != request.End-1))) || (request.Probe && end != 0) || representation.ETag != request.Identity.ETag || representation.Effective != request.Identity.Effective || representation.Encoding != request.Identity.Encoding || (request.Identity.Length >= 0 && total != request.Identity.Length) || (resp.ContentLength >= 0 && resp.ContentLength != end-start+1) {
 			return representation, ErrUnsafeResume
 		}
 		representation.Length = total

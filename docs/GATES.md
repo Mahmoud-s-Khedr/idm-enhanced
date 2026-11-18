@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M2 accepted with hosted evidence in M2_EVIDENCE.md; M3 is next. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M3 delivered; protected acceptance is tracked in M3_EVIDENCE.md. M4 desktop alpha is next. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
@@ -23,7 +23,8 @@ fail. `doctor` diagnoses installations; it is not proof that platform tests pass
 | not applicable yet | live Windows/macOS browser IPC and registration                                                                 | M5                                                            |
 | not applicable yet | installers, signing, media                                                                                      | corresponding release milestones                              |
 
-SQLite migration rollback/reopen/version/constraint tests are active in storage.
+M3 range-worker, shared-limit, queue, retry and parallel process-kill fixtures are active.
+SQLite migrations 001/002 and rollback/reopen/version/constraint tests are active in storage.
 Critical coverage and engine-to-storage dependency rejection have controlled probes.
 
 There are no broad production clone exceptions. Generated desktop bindings and

@@ -196,6 +196,11 @@ func Download(ctx context.Context, client *http.Client, o Options) error {
 		return err
 	}
 	defer func() { _ = m.Close() }()
+	c := DefaultConfig()
+	c.Retries = 0
+	if err := m.Configure(c, client); err != nil {
+		return err
+	}
 	j, err := m.Create(ctx, o)
 	if err != nil {
 		return err

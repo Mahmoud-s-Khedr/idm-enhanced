@@ -1,4 +1,4 @@
-// Package cli presents the sequential downloader without owning transfer policy.
+// Package cli presents download commands without owning transfer policy.
 package cli
 
 import (
@@ -36,7 +36,7 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 	command := "download"
 	if len(args) > 0 {
 		switch args[0] {
-		case "resume", "restart", "status", "cancel":
+		case "resume", "restart", "status", "cancel", "enqueue", "run-queue", "reorder":
 			command = args[0]
 			args = args[1:]
 		}
@@ -49,9 +49,15 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 	timeout := flags.Duration("timeout", 30*time.Minute, "whole-transfer timeout")
 	keep := flags.Bool("keep-partial", false, "retain partial")
 	discard := flags.Bool("discard-partial", false, "discard partial")
+	config := manager.DefaultConfig()
+	workers := flags.Int("workers", config.Workers, "range workers (1-16)")
+	jobsLimit := flags.Int("jobs", config.Jobs, "simultaneous jobs (1-16)")
+	perHost := flags.Int("per-host", config.PerHost, "simultaneous requests per host")
+	rate := flags.Int64("rate", 0, "global body bytes per second (0 unlimited)")
+	retries := flags.Int("retries", config.Retries, "automatic retry count (0-8)")
 	quiet := flags.Bool("quiet", false, "hide progress")
 	usage := func() {
-		_, _ = fmt.Fprintln(stderr, "Usage: downloader [--state-dir DIR] -o FILE [-sha256 HEX] [-timeout 30m] [-quiet] URL; resume|restart|status|cancel [flags] JOB_ID")
+		_, _ = fmt.Fprintln(stderr, "Usage: downloader [--state-dir DIR] -o FILE [-sha256 HEX] [-timeout 30m] [-quiet] URL; enqueue [flags] URL; resume|restart|status|cancel [flags] JOB_ID; run-queue [flags]; reorder JOB_ID...")
 	}
 	if err := flags.Parse(args); err != nil {
 		usage()
@@ -60,10 +66,16 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		}
 		return 2
 	}
-	if *timeout <= 0 || (command == "download" && (flags.NArg() != 1 || *destination == "")) || (command != "download" && command != "status" && flags.NArg() != 1) || (command == "status" && flags.NArg() > 1) || (command == "cancel" && *keep == *discard) {
+	if *timeout <= 0 || ((command == "download" || command == "enqueue") && (flags.NArg() != 1 || *destination == "")) || ((command == "resume" || command == "restart" || command == "cancel") && flags.NArg() != 1) || (command == "status" && flags.NArg() > 1) || (command == "run-queue" && flags.NArg() != 0) || (command == "cancel" && *keep == *discard) {
 		usage()
 		return 2
 	}
+	config.Workers = *workers
+	config.Jobs = *jobsLimit
+	config.PerHost = *perHost
+	config.BytesPerSecond = *rate
+	config.Retries = *retries
+
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 	// The standard transport bounds dial/TLS waits and reuses connections. The
@@ -94,7 +106,14 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 			}
 		}
 	}()
+	if err := m.Configure(config, client); err != nil {
+		return reportError(stderr, err)
+	}
 	switch command {
+	case "run-queue":
+		err = m.RunQueue(ctx)
+	case "reorder":
+		err = m.Reorder(ctx, flags.Args())
 	case "status":
 		var jobs []manager.Job
 		jobs, err = m.Status(ctx)
@@ -102,7 +121,7 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		for _, j := range jobs {
 			if flags.NArg() == 0 || j.ID == flags.Arg(0) {
 				found = true
-				_, _ = fmt.Fprintf(stderr, "%s state=%s durable=%d destination=%q resumable=%t error=%s\n", j.ID, j.State, j.Durable, j.Destination, manager.Resumable(j), manager.SafeError(j))
+				_, _ = fmt.Fprintf(stderr, "%s state=%s durable=%d destination=%q resumable=%t error=%s order=%d retries=%d retry_at=%s\n", j.ID, j.State, j.Durable, j.Destination, manager.Resumable(j), manager.SafeError(j), j.QueueOrder, j.RetryCount, j.RetryAt.Format(time.RFC3339))
 			}
 		}
 		if err == nil && !found {
@@ -117,7 +136,9 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		j, err = m.Create(ctx, manager.Options{URL: flags.Arg(0), Destination: *destination, SHA256: *checksum})
 		if err == nil {
 			_, _ = fmt.Fprintln(stderr, "Job:", j.ID)
-			err = m.Run(ctx, j.ID, false, progress)
+			if command != "enqueue" {
+				err = m.Run(ctx, j.ID, false, progress)
+			}
 		}
 	}
 	if err != nil {
