@@ -221,6 +221,9 @@ func task(n string) error {
 		if err := command("go", "build", "-trimpath", "-o", "build/", "./cmd/..."); err != nil {
 			return err
 		}
+		if runtime.GOOS == "windows" {
+			return command("go", "build", "-trimpath", "-ldflags=-H=windowsgui", "-o", "build/desktop.exe", "./cmd/desktop")
+		}
 		return nil
 	case "budgets":
 		return budgets()
@@ -232,9 +235,25 @@ func task(n string) error {
 		if err := command(binary("govulncheck"), "./..."); err != nil {
 			return err
 		}
+		if runtime.GOOS != "windows" {
+			fmt.Println("+ govulncheck Windows target ./...")
+			c := exec.Command(binary("govulncheck"), "./...")
+			c.Env = append(os.Environ(), "GOOS=windows", "CGO_ENABLED=0")
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			if err := c.Run(); err != nil {
+				return err
+			}
+		}
 		return javascriptAudit()
 	case "staged":
 		return staged()
+	case "package":
+		format := os.Getenv("PACKAGE_FORMAT")
+		if format == "" {
+			format = runtime.GOOS
+		}
+		return command("go", "run", "./tools/package", "-format", format)
 	case "desktop-smoke":
 		return command("node", "tools/desktop-smoke.mjs")
 	case "browser-smoke":
@@ -359,7 +378,7 @@ func doctor() error {
 			fmt.Printf("Browser %s: %s (%v)\n", b, p, e)
 		}
 	} else {
-		fmt.Println("Live native messaging registration/IPC deferred to M5; framing and desktop native builds required.")
+		fmt.Println("Native messaging registration and local IPC available; run browser smoke on a supported browser installation.")
 	}
 	return errors.Join(versionErr, nativeErr)
 }
@@ -460,10 +479,6 @@ func coverage() error {
 		return errors.New("required Go logic suite empty")
 	}
 	for _, p := range strings.Fields(string(pkgs)) {
-		if runtime.GOOS != "linux" && strings.HasSuffix(p, "/internal/ipc") {
-			fmt.Printf("SKIP %s coverage on %s: live application IPC is deferred to M5; shared framing remains required in protocol and native-host integration tests\n", p, runtime.GOOS)
-			continue
-		}
 
 		c := counts[p]
 		if c.total == 0 {
@@ -602,13 +617,13 @@ func aggregate(s string) error {
 	if e := json.Unmarshal([]byte(s), &needs); e != nil {
 		return e
 	}
-	for _, name := range []string{"quality", "native"} {
+	for _, name := range []string{"quality", "native", "linux-packages"} {
 		n, ok := needs[name]
 		if !ok || n.Result != "success" {
 			return fmt.Errorf("mandatory job %s: %q", name, n.Result)
 		}
 	}
-	if len(needs) != 2 {
+	if len(needs) != 3 {
 		return errors.New("unexpected CI dependency set")
 	}
 	return nil

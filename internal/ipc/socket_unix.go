@@ -1,6 +1,9 @@
+//go:build !windows
+
 package ipc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -50,4 +53,12 @@ func Listen() (net.Listener, error) {
 		return nil, e
 	}
 	return l, nil
+}
+
+func dial(ctx context.Context) (net.Conn, error) {
+	path, err := SocketPath()
+	if err != nil {
+		return nil, err
+	}
+	return (&net.Dialer{}).DialContext(ctx, "unix", path)
 }

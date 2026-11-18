@@ -25,6 +25,12 @@ export default defineConfig({
   ],
   build: {
     emptyOutDir: true,
-    rollupOptions: { input: 'extensions/shared/popup.html' },
+    rollupOptions: {
+      input: {
+        popup: 'extensions/shared/popup.html',
+        background: 'extensions/shared/src/background.ts',
+      },
+      output: { entryFileNames: '[name].js' },
+    },
   },
 });

@@ -14,15 +14,31 @@ export function decode(value: unknown): Message {
     !/^[A-Za-z0-9_-]{1,64}$/.test(value.id) ||
     !('type' in value) ||
     typeof value.type !== 'string' ||
-    !['ping', 'ack', 'error'].includes(value.type)
+    !['ping', 'ack', 'error', 'accepted'].includes(value.type)
   )
     throw new Error('Invalid desktop reply');
   if (
     Object.keys(value).some(
-      (key) => !['version', 'id', 'type', 'error'].includes(key),
+      (key) => !['version', 'id', 'type', 'error', 'jobId'].includes(key),
     )
   )
     throw new Error('Unknown message field');
+  if (value.type === 'accepted') {
+    if (
+      !('jobId' in value) ||
+      typeof value.jobId !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,64}$/.test(value.jobId) ||
+      'error' in value
+    )
+      throw new Error('Invalid accepted reply');
+    return {
+      version: VERSION,
+      id: value.id,
+      type: 'accepted',
+      jobId: value.jobId,
+    };
+  }
+  if ('jobId' in value) throw new Error('Unexpected job ID');
   if (value.type === 'error') {
     if (
       !('error' in value) ||
@@ -42,14 +58,14 @@ export function decode(value: unknown): Message {
     throw new Error('Unexpected error field');
   return { version: VERSION, id: value.id, type: value.type };
 }
-export async function testConnection(
+export async function exchange(
   send: SendNative,
-  id: string = crypto.randomUUID(),
+  request: Message,
   timeout = TIMEOUT_MS,
-): Promise<string> {
+): Promise<Message> {
+  const id = request.id;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const request = decode({ version: VERSION, id, type: 'ping' });
     const response = decode(
       await Promise.race([
         send(HOST, request),
@@ -68,10 +84,23 @@ export async function testConnection(
     );
     if (response.id !== id) throw new Error('Acknowledgement ID mismatch');
     if (response.type === 'error') throw new Error(response.error);
-    if (response.type !== 'ack')
+    if (response.type !== (request.type === 'download' ? 'accepted' : 'ack'))
       throw new Error('Expected desktop acknowledgement');
-    return `Desktop acknowledged ${response.id}`;
+    return response;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
+}
+
+export async function testConnection(
+  send: SendNative,
+  id: string = crypto.randomUUID(),
+  timeout = TIMEOUT_MS,
+): Promise<string> {
+  const reply = await exchange(
+    send,
+    decode({ version: VERSION, id, type: 'ping' }),
+    timeout,
+  );
+  return `Desktop acknowledged ${reply.id}`;
 }

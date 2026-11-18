@@ -8,10 +8,12 @@ for persistent download/resume acceptance and limitations. M3 parallel engine/ma
 Read `PROJECT_PLAN.md` for scope and `docs/QUALITY_POLICY.md` for engineering standards.
 Canonical tooling is implemented at `tools/quality`; run `doctor`, `check`, and `check:full`.
 Read `docs/GATES.md` and `docs/M0_EVIDENCE.md` for activation status and actual platform evidence.
-M2 PR #3 and M3 PR #5 are merged. M4 desktop alpha is implemented; read
-`docs/M4_EVIDENCE.md` and `docs/decisions/0005-m4-desktop-session.md`. Final M4
-acceptance requires protected merge. Begin M5 only afterward; keep scope within
-the plan and preserve the M2/M3 recovery invariants.
+M2 PR #3, M3 PR #5 and M4 PR #6 are merged. Read
+`docs/M4_EVIDENCE.md` and `docs/decisions/0005-m4-desktop-session.md`. M5 browser handoff and alpha installers are implemented; acceptance is tracked in
+`docs/M5_EVIDENCE.md` and `docs/decisions/0006-m5-browser-distribution.md`.
+The user explicitly moved Debian/Fedora/Windows installers and Firefox/Chrome
+extension artifacts into M5. Require protected M5 merge before M6. Preserve
+the M2/M3 recovery invariants.
 
 ## Before changing code
 

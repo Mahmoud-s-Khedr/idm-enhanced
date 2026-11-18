@@ -4,6 +4,8 @@ package desktop
 import (
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/protocol"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 )
@@ -30,15 +32,37 @@ func New(ipcStatus string) *Service { return &Service{ipc: ipcStatus} }
 func (s *Service) Info() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return Status{Build: "M4 / Wails 3.0.0", Platform: runtime.GOOS + "/" + runtime.GOARCH, LastPing: s.last, IPC: s.ipc, Notification: s.notification, Lifecycle: s.lifecycle}
+	return Status{Build: "M5 / Wails 3.0.0", Platform: runtime.GOOS + "/" + runtime.GOARCH, LastPing: s.last, IPC: s.ipc, Notification: s.notification, Lifecycle: s.lifecycle}
 }
 func (s *Service) Hello() string { return "Connected to the Go desktop service." }
 
 //wails:ignore
 func (s *Service) Accept(m protocol.Message) (protocol.Message, error) {
-	reply, e := protocol.Ack(m)
-	if e != nil {
-		return reply, e
+	if err := protocol.ValidateRequest(m); err != nil {
+		return protocol.Message{}, err
+	}
+	if m.Type == "download" {
+		reply := protocol.Message{Version: protocol.Version, ID: m.ID, Type: "error", Error: "Download was not accepted. Open the desktop and check the download folder or request ID; retry the same request."}
+		if s.session == nil {
+			return reply, nil
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return reply, nil
+		}
+		directory := filepath.Join(home, "Downloads")
+		if err = os.MkdirAll(directory, 0755); err != nil {
+			return reply, nil
+		}
+		id, err := s.session.AcceptBrowser(m, directory)
+		if err != nil {
+			return reply, nil
+		}
+		return protocol.Message{Version: protocol.Version, ID: m.ID, Type: "accepted", JobID: id}, nil
+	}
+	reply, err := protocol.Ack(m)
+	if err != nil {
+		return reply, err
 	}
 	s.mu.Lock()
 	s.last = m.ID

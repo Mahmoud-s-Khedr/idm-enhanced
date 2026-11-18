@@ -18,7 +18,7 @@
       "ignore": ["bindings/**"]
     },
     "extensions/shared": {
-      "entry": ["src/popup.ts", "src/**/*.test.ts"],
+      "entry": ["src/popup.ts", "src/**/*.test.ts", "src/background.ts"],
       "project": ["src/**/*.ts"]
     },
     "extensions/firefox": {},

@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M4 desktop alpha implemented; protected acceptance is tracked in M4_EVIDENCE.md. M3 PR #5 is merged. M5 browser handoff is next. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M5 browser handoff and alpha installers implemented; acceptance is tracked in M5_EVIDENCE.md. M4 PR #6 is merged. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
@@ -60,3 +60,17 @@ redaction fixtures are active under the existing coverage thresholds.
 ordinary headless checks do not silently claim it ran. The test driver is excluded
 from production by the `desktop_smoke` build tag. Existing required CI jobs and
 thresholds remain unchanged. See M4_EVIDENCE.md for exact native limitations.
+
+## M5 activation
+
+Browser download/accepted envelopes, schema-4 atomic receipts and process-level
+native-host handoff are active. Linux/macOS live IPC and Windows user-only named
+pipes have native fixture coverage; the old non-Linux IPC coverage exemption is
+removed. Extension context menus, pending-request retry and safe filename modules
+are included in existing per-file frontend thresholds. No threshold is reduced.
+
+CI additionally builds/installs/uninstalls native Debian 13 and Fedora 45 packages,
+and Windows setup using Inno Setup 6.5.4. The aggregate requires the linux-packages
+matrix and native Windows installer checks. Artifacts include extension archives
+and SHA256SUMS. Display-dependent browser/desktop smoke remains explicit; native
+CI does not establish interactive Windows/macOS browser compatibility.

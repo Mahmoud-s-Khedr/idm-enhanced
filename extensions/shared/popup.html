@@ -2,12 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>IDM Enhanced connection</title>
+    <title>IDM Enhanced downloads</title>
   </head>
   <body>
     <h1>IDM Enhanced</h1>
-    <button>Test desktop connection</button>
+    <p>
+      Queue a direct HTTP(S) link in your Downloads folder. Open the desktop to
+      run it.
+    </p>
+    <form>
+      <label
+        >Download URL <input id="url" type="url" required size="40" /></label
+      ><br />
+      <label>Filename (optional) <input id="filename" maxlength="180" /></label
+      ><br />
+      <button type="submit">Queue download</button>
+    </form>
+    <button id="retry">Retry last handoff</button
+    ><button id="connect">Test desktop connection</button>
     <p><output aria-live="polite">Ready to connect</output></p>
+    <p>
+      Cookies, POST, blob: and protected media are unsupported. Use the browser
+      for those downloads.
+    </p>
     <script type="module" src="./src/popup.ts"></script>
   </body>
 </html>

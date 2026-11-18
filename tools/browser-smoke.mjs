@@ -1,6 +1,7 @@
 // Linux acceptance smoke against a running native desktop app. Uses disposable
 // browser profiles, real installed extensions, and each browser's native host.
-import { spawn, execFileSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import {
   mkdtempSync,
   readFileSync,
@@ -17,6 +18,12 @@ const ids = JSON.parse(readFileSync('extensions/identities.json', 'utf8'));
 const temporary = mkdtempSync(join(tmpdir(), 'idm-browser-'));
 const children = [];
 const evidence = [];
+const originalHome = process.env.HOME;
+const server = createServer((_request, response) =>
+  response.end('M5 browser fixture'),
+);
+let fixtureURL;
+
 async function until(operation, timeout = 15000) {
   const deadline = Date.now() + timeout;
   let last;
@@ -86,7 +93,7 @@ async function firefox() {
     });
     await webdriver(`/session/${sessionId}/url`, { url });
     await webdriver(`/session/${sessionId}/execute/sync`, {
-      script: 'document.querySelector("button").click(); return true;',
+      script: 'document.querySelector("#connect").click(); return true;',
       args: [],
     });
     const result = await until(async () => {
@@ -99,10 +106,34 @@ async function firefox() {
         throw new Error(text);
       return false;
     }, 8000);
+    await webdriver(`/session/${sessionId}/execute/sync`, {
+      script:
+        'document.querySelector("#url").value=arguments[0]; document.querySelector("#filename").value="firefox-m5.bin"; document.querySelector("form").requestSubmit(); return true;',
+      args: [fixtureURL],
+    });
+    const accepted = await until(async () => {
+      const text = await webdriver(`/session/${sessionId}/execute/sync`, {
+        script: 'return document.querySelector("output").textContent',
+        args: [],
+      });
+      return text.startsWith('Queued in desktop as ') && text;
+    });
+    await webdriver(`/session/${sessionId}/execute/sync`, {
+      script: 'document.querySelector("#retry").click(); return true;',
+      args: [],
+    });
+    await until(
+      async () =>
+        (await webdriver(`/session/${sessionId}/execute/sync`, {
+          script: 'return document.querySelector("output").textContent',
+          args: [],
+        })) === accepted,
+    );
     evidence.push({
       browser: 'Firefox',
       version: capabilities.browserVersion,
       result,
+      accepted,
     });
   } finally {
     await webdriver(`/session/${sessionId}`, undefined, 'DELETE');
@@ -185,7 +216,7 @@ async function chromium() {
       async () =>
         (await evaluate('!!document.querySelector("button")')).result.value,
     );
-    await evaluate('document.querySelector("button").click()');
+    await evaluate('document.querySelector("#connect").click()');
     const result = await until(async () => {
       const text = (
         await evaluate('document.querySelector("output").textContent')
@@ -195,17 +226,66 @@ async function chromium() {
         throw new Error(text);
       return false;
     }, 8000);
-    evidence.push({ browser: 'Chromium', version: version.Browser, result });
+    await evaluate(
+      `document.querySelector('#url').value=${JSON.stringify(fixtureURL)};document.querySelector('#filename').value='chrome-m5.bin';document.querySelector('form').requestSubmit();`,
+    );
+    const accepted = await until(async () => {
+      const text = (
+        await evaluate('document.querySelector("output").textContent')
+      ).result.value;
+      return text.startsWith('Queued in desktop as ') && text;
+    });
+    await evaluate('document.querySelector("#retry").click()');
+    await until(
+      async () =>
+        (await evaluate('document.querySelector("output").textContent')).result
+          .value === accepted,
+    );
+    evidence.push({
+      browser: 'Chromium',
+      version: version.Browser,
+      result,
+      accepted,
+    });
   } finally {
     ws.close();
   }
 }
 try {
   if (process.platform !== 'linux')
-    throw new Error('Live browser smoke is Linux-only in M0');
+    throw new Error('Live browser smoke currently runs on Linux');
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  fixtureURL = `http://127.0.0.1:${server.address().port}/file`;
+  process.env.HOME = join(temporary, 'home');
+  process.env.XDG_CONFIG_HOME = join(temporary, 'config');
+  process.env.XDG_RUNTIME_DIR = join(temporary, 'runtime');
+  mkdirSync(process.env.HOME, { recursive: true });
+  mkdirSync(process.env.XDG_RUNTIME_DIR, { mode: 0o700 });
+  const app = spawn(
+    resolve('build/desktop'),
+    ['--state-dir', join(temporary, 'state')],
+    { stdio: 'ignore', env: process.env },
+  );
+  children.push(app);
+  await until(() =>
+    existsSync(join(process.env.XDG_RUNTIME_DIR, 'idm-enhanced/desktop.sock')),
+  );
   await firefox();
   console.log(JSON.stringify(evidence.at(-1)));
   await chromium();
+  const listing = spawnSync(
+    resolve('build/downloader'),
+    ['--state-dir', join(temporary, 'state'), 'status'],
+    { encoding: 'utf8' },
+  );
+  if (listing.status !== 0) throw new Error('Could not read desktop state');
+  const status = listing.stdout + listing.stderr;
+  if (
+    !status.includes('firefox-m5.bin') ||
+    !status.includes('chrome-m5.bin') ||
+    status.split('queued').length - 1 !== 2
+  )
+    throw new Error('Browser handoffs were not durably queued exactly once');
   const report = {
     at: new Date().toISOString(),
     platform: `${process.platform}/${process.arch}`,
@@ -220,5 +300,8 @@ try {
 } finally {
   for (const child of children) child.kill('SIGTERM');
   await delay(500);
+  server.closeAllConnections();
+  await new Promise((resolve) => server.close(resolve));
+  if (originalHome !== undefined) process.env.HOME = originalHome;
   rmSync(temporary, { recursive: true, force: true });
 }

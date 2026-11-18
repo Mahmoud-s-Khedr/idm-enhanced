@@ -56,10 +56,68 @@ jobs:
       - run: go test -vet=off -count=1 ./...
       - run: go run ./tools/quality task integration
       - run: go run ./tools/quality task platform-info
+      - name: Install pinned Windows installer compiler
+        if: runner.os == 'Windows'
+        run: choco upgrade innosetup --version=6.5.4 --allow-downgrade --yes --no-progress
+      - if: runner.os == 'Windows'
+        run: go run ./tools/quality task package
+      - if: runner.os == 'Windows'
+        run: ./packaging/smoke-windows.ps1
+      - if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installable-windows-amd64
+          path: build/packages/*
+          if-no-files-found: error
+          retention-days: 30
+  linux-packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:13
+            format: deb
+          - image: fedora:45
+            format: rpm
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install native build and package tools
+        shell: sh
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update
+            apt-get install -y git ca-certificates curl build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+          else
+            dnf install -y git ca-certificates curl gcc gcc-c++ pkgconf-pkg-config gtk4-devel webkitgtk6.0-devel rpm-build
+          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 12.21.0
+          run_install: false
+      - run: go run ./tools/quality bootstrap-deps
+      - run: go run ./tools/quality task build
+      - run: go run ./tools/quality task package
+        env:
+          PACKAGE_FORMAT: ${{ matrix.format }}
+      - run: sh packaging/smoke-linux.sh ${{ matrix.format }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installable-linux-${{ matrix.format }}
+          path: build/packages/*
+          if-no-files-found: error
+          retention-days: 30
   required:
     name: Required checks
     if: always()
-    needs: [quality, native]
+    needs: [quality, native, linux-packages]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

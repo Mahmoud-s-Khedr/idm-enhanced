@@ -1,16 +1,16 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M4 delivered; M4 acceptance follows its protected PR merge; M5 browser integration is next
+Status: M0–M4 accepted; M5 browser handoff and alpha installers implemented, validation in progress
 
 Date: 2026-11-16
 
-Updated: 2026-11-18 — M4 implementation and validation tracked in docs/M4_EVIDENCE.md
+Updated: 2026-11-18 — M5 implementation and validation tracked in docs/M5_EVIDENCE.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 
 Target: Windows, macOS, and Linux desktop
 
-Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI. [M2 evidence](docs/M2_EVIDENCE.md) covers persistence/recovery and [M3 evidence](docs/M3_EVIDENCE.md) covers parallel transfers, queues and shared limits; M4 desktop workflows are implemented with acceptance tracked in [M4 evidence](docs/M4_EVIDENCE.md); browser handoff and media remain planned.
+Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI. [M2 evidence](docs/M2_EVIDENCE.md) covers persistence/recovery and [M3 evidence](docs/M3_EVIDENCE.md) covers parallel transfers, queues and shared limits; M4 desktop workflows are implemented with acceptance tracked in [M4 evidence](docs/M4_EVIDENCE.md); M5 browser handoff and alpha installers are tracked in [M5 evidence](docs/M5_EVIDENCE.md); media remains planned.
 
 ## 1. Project direction
 
@@ -265,7 +265,7 @@ Estimates assume one developer working roughly full-time. They are planning rang
 | M2: Persistent safe resume    | 2–3 weeks | SQLite, checkpoints, resource validators, recovery                                                                                               | Relaunch resumes safely; changed resources and ignored ranges never silently corrupt output                                                                              |
 | M3: Parallel engine/manager   | 2–3 weeks | Segmented transfers, queues, concurrency/bandwidth limits, backoff                                                                               | Failure matrix passes; limits hold across jobs; race detector passes supported suites                                                                                    |
 | M4: Desktop alpha             | 2–3 weeks | UI workflows, history, tray, schedules, notifications                                                                                            | Core workflows work without CLI; close/quit/sleep behavior is explicit and tested                                                                                        |
-| M5: Browser integration       | 2–3 weeks | Native host, Firefox then Chromium explicit handoff                                                                                              | Registration works on target OS/browser matrix; unavailable app and duplicate messages are handled                                                                       |
+| M5: Browser integration       | 2–3 weeks | Native host, Firefox then Chromium explicit handoff; Debian/Fedora/Windows alpha installers (user-approved M5 scope expansion)                   | Registration works on target OS/browser matrix; unavailable app and duplicate messages are handled                                                                       |
 | M6: Core beta hardening       | 2–3 weeks | Installers, recovery fixes, accessibility pass, user testing                                                                                     | R1 release checklist passes; core fixtures and platform smoke tests are green                                                                                            |
 | M7: HLS media beta            | 3–5 weeks | Detection, supported VOD profiles, selection, resumable resource jobs, FFmpeg                                                                    | Fixture outputs play correctly; interruptions and assembly failures recover                                                                                              |
 | M8: DASH expansion            | 3–5 weeks | Supported static MPD profiles, track selection, muxing                                                                                           | Published support matrix and playback/recovery tests pass                                                                                                                |

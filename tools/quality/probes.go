@@ -233,7 +233,7 @@ func probes() error {
 	for _, result := range []string{"failure", "cancelled", "skipped", ""} {
 		c := exec.Command(binaryPath, "task", "aggregate")
 		c.Dir = dir
-		c.Env = append(os.Environ(), `QUALITY_NEEDS={"quality":{"result":"success"},"native":{"result":"`+result+`"}}`)
+		c.Env = append(os.Environ(), `QUALITY_NEEDS={"quality":{"result":"success"},"native":{"result":"`+result+`"},"linux-packages":{"result":"success"}}`)
 		if e = c.Run(); e == nil {
 			return errors.New("CI aggregate accepted non-success")
 		}

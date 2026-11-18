@@ -12,18 +12,14 @@ import (
 )
 
 func Exchange(ctx context.Context, m protocol.Message) (protocol.Message, error) {
-	if _, e := protocol.Ack(m); e != nil {
-		return protocol.Message{}, e
-	}
-	path, e := SocketPath()
-	if e != nil {
+	if e := protocol.ValidateRequest(m); e != nil {
 		return protocol.Message{}, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, protocol.Timeout)
 	defer cancel()
-	conn, e := (&net.Dialer{}).DialContext(ctx, "unix", path)
+	conn, e := dial(ctx)
 	if e != nil {
-		return protocol.Message{}, fmt.Errorf("open IDM Enhanced before testing the connection: %w", e)
+		return protocol.Message{}, fmt.Errorf("open IDM Enhanced and retry: %w", e)
 	}
 	defer func() { _ = conn.Close() }()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })

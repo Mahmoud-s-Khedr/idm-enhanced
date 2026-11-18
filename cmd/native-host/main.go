@@ -7,10 +7,23 @@ import (
 	"os"
 
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/ipc"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/nativehost"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/protocol"
 )
 
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--register" || os.Args[1] == "--unregister") {
+		path, err := os.Executable()
+		if err == nil {
+			err = nativehost.Register(path, os.Args[1] == "--unregister")
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), protocol.Timeout)
 	defer cancel()
 	type result struct {
@@ -33,8 +46,8 @@ func main() {
 	}
 	reply, e := ipc.Exchange(ctx, request)
 	if e != nil {
-		reply = protocol.Message{Version: protocol.Version, ID: request.ID, Type: "error", Error: "Open IDM Enhanced and retry. Live browser IPC currently requires Linux."}
-		fmt.Fprintln(os.Stderr, "Desktop connection failed:", e)
+		reply = protocol.Message{Version: protocol.Version, ID: request.ID, Type: "error", Error: "Open IDM Enhanced and retry the same request. Check native host registration if the problem persists."}
+		fmt.Fprintln(os.Stderr, "Desktop connection failed; open the application and retry")
 	}
 	if e = protocol.Write(os.Stdout, reply); e != nil {
 		fmt.Fprintln(os.Stderr, "Write native response:", e)

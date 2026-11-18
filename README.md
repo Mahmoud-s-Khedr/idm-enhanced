@@ -5,7 +5,7 @@ gates and browser ping. M2 adds durable CLI downloads and safe resume. M3 adds
 parallel ranges, queues, shared limits and bounded retries; acceptance is tracked in
 [M3 evidence](docs/M3_EVIDENCE.md). M4 adds desktop download management, history, persisted settings,
 one-time schedules and native lifecycle controls; see [M4 evidence](docs/M4_EVIDENCE.md).
-Browser handoff, media and installers remain later milestones. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
+M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). Media remains later work. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -139,40 +139,77 @@ and a test-only build tag (requires a display; close other app instances first):
 go run ./tools/quality task desktop-smoke
 ```
 
-## Run the platform spike
+## Browser integration and installable alpha (M5)
+
+CI's **Quality** workflow uploads 30-day artifacts for every PR and main build:
+
+- `installable-linux-deb`: Debian 13 amd64 `.deb`.
+- `installable-linux-rpm`: Fedora 45 x86_64 `.rpm`.
+- `installable-windows-amd64`: per-user Windows setup `.exe` (WebView2 required).
+
+Each includes Firefox unsigned `.xpi`, Chrome `.zip` and `SHA256SUMS`. Download
+from the successful Actions run's Artifacts section and verify checksums. These
+are unsigned alpha packages, without store publication or signing. Install Linux
+with `sudo apt install ./idm-enhanced_0.5.0_amd64.deb` or
+`sudo dnf install ./idm-enhanced-0.5.0-1.x86_64.rpm`; launch IDM Enhanced from the
+application menu. Windows setup installs for the current user without elevation.
+
+Open the desktop once to register its sibling native host. For Firefox, temporarily
+load the unsigned XPI using `about:debugging` → This Firefox → Load Temporary
+Add-on (permanent installation in Firefox Release needs Mozilla signing). For
+Chrome, extract the ZIP, open `chrome://extensions`, enable Developer mode and
+Load unpacked. Chromium also uses that package. Keep the manifest's public `key`
+so its ID matches native registration. Default browser installations/profiles are
+the current support boundary; sandboxed Flatpak/Snap browsers are unverified.
+
+Right-click an HTTP(S) link and choose **Download with IDM Enhanced**, or enter a
+URL in the extension popup. Acknowledgement means the job is durably queued in
+`~/Downloads` (Windows: the user profile's Downloads directory). Open the desktop
+and choose Run queue. Files are never overwritten; collisions get numbered names.
+The extension saves the latest request and shows context-menu results through its
+badge/popup. **Retry last handoff** reuses its request ID, including after a lost
+acknowledgement or app restart. Do not submit a new request to retry the old one.
+Only the latest request has a retry slot. That slot retains its URL (including any
+signed query) in local browser extension storage until replaced.
+
+The app must be running. Missing/closed apps explain how to open and retry; the
+browser link remains usable. Cookies/session credentials, POST, blob/data URLs,
+automatic interception and media manifests are unsupported. Use the browser for
+those cases. Receipts persist after history removal to prevent late duplicates;
+this alpha caps them at 10,000 per state directory and then rejects new handoffs.
+
+Repair or remove user registration using the installed host:
 
 ```sh
-go run ./tools/quality task build
-./build/desktop
-```
-
-Leave the app running; select **Test backend connection** to call Go. For Linux
-browser connections, in another terminal:
-
-```sh
+# Linux (run as your normal user):
+/usr/lib/idm-enhanced/native-host --register
+/usr/lib/idm-enhanced/native-host --unregister
+# Development checkout, after task build:
 go run ./tools/quality task register
-```
-
-Load `extensions/chromium/dist` as an unpacked extension from `chrome://extensions`
-with developer mode enabled. Firefox: `about:debugging` → This Firefox → Load
-Temporary Add-on → `extensions/firefox/dist/manifest.json`. Open the extension's
-popup and choose **Test desktop connection**. The app shows the matching request ID.
-Development identities are fixed in `extensions/identities.json`; Chromium's checked
-in key is public only. No browser profile or signed extension is installed by setup.
-
-Registration writes only user manifests for Firefox, Chromium and Google Chrome,
-with an absolute native-host path and explicit allowed extension identity. Cleanup:
-
-```sh
 go run ./tools/quality task unregister
 ```
 
-The app must already be running. Errors instruct you to open it and retry. Messages
-are capped at 64 KiB; waits at five seconds. The Linux IPC directory must be private
-0700, socket 0600. A crash can leave a stale socket: verify no app is running before
-removing `$XDG_RUNTIME_DIR/idm-enhanced/desktop.sock` (or the user-cache equivalent).
-Windows/macOS live IPC and registration are deferred to M5; desktop/framing builds
-are required in native CI. Signing and installers are not part of this spike.
+Windows: run `native-host.exe --register`/`--unregister` in the installation folder;
+the uninstaller unregisters automatically. On Linux, run `--unregister` before
+removing the package; system package removal cannot safely alter every user's
+home. Uninstall retains downloads and application state. macOS supports native
+builds and user registration, but no installer is supplied in M5.
+
+Build packages after `task build` with `PACKAGE_FORMAT=deb` or `rpm` followed by
+`go run ./tools/quality task package`. Windows uses `PACKAGE_FORMAT=windows` and
+Inno Setup 6.5.4. Packaging explicitly requires the corresponding system tools;
+ordinary checks do not install them. Package assembly also emits both extension
+archives. Linux browser smoke launches an isolated real desktop and disposable
+Firefox/Chromium profiles, queues deterministic links and verifies durable IDs:
+
+```sh
+go run ./tools/quality task browser-smoke
+```
+
+Live IPC keeps the existing five-second/64-KiB bounds. Unix uses a private 0700
+directory and 0600 socket; Windows uses a user-SID-restricted pipe. A crash may
+leave a stale Unix socket: verify no app is running before removing
+`$XDG_RUNTIME_DIR/idm-enhanced/desktop.sock` (or the user-cache equivalent).
 
 ## Agent desktop tools on Linux
 

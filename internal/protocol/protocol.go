@@ -1,4 +1,4 @@
-// Package protocol owns the M0 ping contract and native-message framing.
+// Package protocol owns the browser handoff contract and native-message framing.
 package protocol
 
 import (
@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
 )
 
 const Version = 1
@@ -19,10 +22,13 @@ const Timeout = 5 * time.Second
 var requestID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 type Message struct {
-	Version int    `json:"version"`
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Error   string `json:"error,omitempty"`
+	Version  int    `json:"version"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Error    string `json:"error,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	JobID    string `json:"jobId,omitempty"`
 }
 
 func (m Message) Validate() error {
@@ -32,7 +38,22 @@ func (m Message) Validate() error {
 	if !requestID.MatchString(m.ID) {
 		return errors.New("invalid request ID")
 	}
+	if m.Type != "download" && (m.URL != "" || m.Filename != "") {
+		return errors.New("unexpected download fields")
+	}
+	if m.Type != "accepted" && m.JobID != "" {
+		return errors.New("unexpected job ID")
+	}
 	switch m.Type {
+	case "download":
+		if m.Error != "" {
+			return errors.New("unexpected error field")
+		}
+		return ValidateDownload(m.URL, m.Filename)
+	case "accepted":
+		if !requestID.MatchString(m.JobID) || m.Error != "" {
+			return errors.New("invalid accepted reply")
+		}
 	case "ping", "ack":
 		if m.Error != "" {
 			return errors.New("unexpected error field")
@@ -43,6 +64,36 @@ func (m Message) Validate() error {
 		}
 	default:
 		return errors.New("unsupported message type")
+	}
+	return nil
+}
+
+// ValidateDownload rejects browser-only URLs, credentials and unsafe portable names.
+func ValidateDownload(source, filename string) error {
+	u, err := url.Parse(source)
+	if err != nil || len(source) > 16384 || u.User != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Fragment != "" {
+		return errors.New("only credential-free HTTP(S) URLs without fragments are supported")
+	}
+	if filename == "" || len(filename) > 180 || strings.ContainsAny(filename, `/\\:<>"|?*`) || strings.TrimRight(filename, " .") != filename || filename == "." || filename == ".." {
+		return errors.New("invalid filename")
+	}
+	for _, r := range filename {
+		if unicode.IsControl(r) {
+			return errors.New("invalid filename")
+		}
+	}
+	stem := strings.ToUpper(strings.SplitN(filename, ".", 2)[0])
+	if stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" || (len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '0' && stem[3] <= '9') {
+		return errors.New("reserved filename")
+	}
+	return nil
+}
+func ValidateRequest(m Message) error {
+	if err := m.Validate(); err != nil {
+		return err
+	}
+	if m.Type != "ping" && m.Type != "download" {
+		return errors.New("expected browser request")
 	}
 	return nil
 }
@@ -85,6 +136,9 @@ func Write(w io.Writer, m Message) error {
 	if e != nil {
 		return e
 	}
+	if len(b) > MaxMessage {
+		return errors.New("message exceeds 64 KiB")
+	}
 	var size [4]byte
 	binary.LittleEndian.PutUint32(size[:], uint32(len(b)))
 	for _, part := range [][]byte{size[:], b} {
@@ -117,7 +171,11 @@ func Match(request, response Message) error {
 	if response.Type == "error" {
 		return errors.New(response.Error)
 	}
-	if response.Type != "ack" {
+	expected := "ack"
+	if request.Type == "download" {
+		expected = "accepted"
+	}
+	if response.Type != expected {
 		return errors.New("expected acknowledgement")
 	}
 	return nil

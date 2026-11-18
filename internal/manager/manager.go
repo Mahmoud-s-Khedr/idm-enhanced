@@ -71,6 +71,9 @@ func (m *Manager) Status(ctx context.Context) ([]Job, error) { return m.store.Li
 func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.create(ctx, o, "", "")
+}
+func (m *Manager) create(ctx context.Context, o Options, requestID, fingerprint string) (Job, error) {
 	jobs, err := m.store.List(ctx)
 	if err != nil {
 		return Job{}, err
@@ -117,8 +120,14 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	for _, existing := range jobs {
 		j.QueueOrder = max(j.QueueOrder, existing.QueueOrder+1)
 	}
-	if err := m.store.Save(ctx, j); err != nil {
-		return Job{}, err
+	var saveErr error
+	if requestID == "" {
+		saveErr = m.store.Save(ctx, j)
+	} else {
+		saveErr = m.store.SaveBrowser(ctx, j, requestID, fingerprint)
+	}
+	if saveErr != nil {
+		return Job{}, saveErr
 	}
 	return j, nil
 }

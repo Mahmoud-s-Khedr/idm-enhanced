@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -95,68 +92,13 @@ func staged() error {
 	return run(binary("gitleaks"), "dir", ".", "--redact", "--no-banner")
 }
 func registration(remove bool) error {
-	if runtime.GOOS != "linux" {
-		return errors.New("M0 browser registration is Linux-only; Windows/macOS scheduled for M5")
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
 	}
-	var ids struct {
-		Firefox  string
-		Chromium string
+	action := "--register"
+	if remove {
+		action = "--unregister"
 	}
-	b, e := os.ReadFile("extensions/identities.json")
-	if e != nil {
-		return e
-	}
-	if e = json.Unmarshal(b, &ids); e != nil {
-		return e
-	}
-	home, e := os.UserHomeDir()
-	if e != nil {
-		return e
-	}
-	config, e := os.UserConfigDir()
-	if e != nil {
-		return e
-	}
-	paths := map[string]bool{filepath.Join(home, ".mozilla/native-messaging-hosts"): true, filepath.Join(config, "chromium/NativeMessagingHosts"): false, filepath.Join(config, "google-chrome/NativeMessagingHosts"): false}
-	host := filepath.Join(root, "build", "native-host")
-	if !remove {
-		if _, e = os.Stat(host); e != nil {
-			return fmt.Errorf("run task build first: %w", e)
-		}
-	}
-	for dir, firefox := range paths {
-		path := filepath.Join(dir, "com.idmenhanced.desktop.json")
-		m := map[string]any{"name": "com.idmenhanced.desktop", "description": "IDM Enhanced M0 development bridge", "path": host, "type": "stdio"}
-		if firefox {
-			m["allowed_extensions"] = []string{ids.Firefox}
-		} else {
-			m["allowed_origins"] = []string{"chrome-extension://" + ids.Chromium + "/"}
-		}
-		data, e := json.MarshalIndent(m, "", "  ")
-		if e != nil {
-			return e
-		}
-		data = append(data, '\n')
-		old, e := os.ReadFile(path)
-		if e != nil && !errors.Is(e, os.ErrNotExist) {
-			return e
-		}
-		if e == nil && !bytes.Equal(old, data) {
-			return fmt.Errorf("refusing to overwrite/remove another registration: %s", path)
-		}
-		if remove {
-			if e = os.Remove(path); e != nil && !errors.Is(e, os.ErrNotExist) {
-				return e
-			}
-		} else {
-			if e = os.MkdirAll(dir, 0700); e != nil {
-				return e
-			}
-			if e = os.WriteFile(path, data, 0600); e != nil {
-				return e
-			}
-		}
-		fmt.Println(path)
-	}
-	return nil
+	return command(filepath.Join(root, "build", "native-host"+suffix), action)
 }
