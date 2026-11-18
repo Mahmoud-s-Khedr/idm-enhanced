@@ -3,8 +3,9 @@
 A local Go download manager in development. M0 supplies the desktop shell, quality
 gates and browser ping. M2 adds durable CLI downloads and safe resume. M3 adds
 parallel ranges, queues, shared limits and bounded retries; acceptance is tracked in
-[M3 evidence](docs/M3_EVIDENCE.md). Full desktop workflows, media and installers
-remain later milestones. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
+[M3 evidence](docs/M3_EVIDENCE.md). M4 adds desktop download management, history, persisted settings,
+one-time schedules and native lifecycle controls; see [M4 evidence](docs/M4_EVIDENCE.md).
+Browser handoff, media and installers remain later milestones. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -100,6 +101,43 @@ Retry waits persist and are respected by explicit resume after relaunch. A new
 explicit invocation starts a fresh bounded retry budget. Set `-retries 0` to disable
 automatic retry. There is no automatic startup drain. See
 [ADR 0004](docs/decisions/0004-m3-parallel-manager.md) for recovery and limit details.
+
+## Desktop alpha (M4)
+
+```sh
+go run ./tools/quality task build
+./build/desktop
+# Optional isolated state (same layout as the CLI):
+./build/desktop --state-dir /path/to/private/state
+```
+
+Add a URL and a new destination, then choose **Run queue**. Use **Pause all**
+before changing limits, reordering, cancelling or removing jobs during a drain.
+Cancellation explicitly chooses whether to retain partial data. Restart discards
+owned progress; removing completed history keeps the output. Native Browse,
+open-file and reveal-in-folder controls are available. Existing destination files
+are rejected; choose another name. Drop a link into the URL field or paste it.
+
+Settings persist in SQLite. One-time schedules use the displayed local timezone
+and store UTC instants; overdue schedules run when the app next opens or wakes,
+after any active run/drain finishes. Future schedules are excluded from manual
+queue draining. Interrupted jobs stay paused for explicit resume. **Pause all**
+holds scheduled admission until an explicit run or relaunch. No download runs
+while the app is closed, and no system wake alarm is installed.
+
+Closing the window leaves work in the tray. Linux without a tray host minimizes
+to the taskbar instead; the app explains which behavior applies. **Quit safely**
+checkpoints and joins active work. Native notifications are optional and depend on
+OS authorization; unavailable delivery is shown in the app and completion remains
+in History. Unsigned macOS builds may lack notification support. M4 migrates the
+state database to version 3; older binaries cannot open the upgraded database.
+
+A real native WebView smoke uses a temporary state directory, local HTTP fixture
+and a test-only build tag (requires a display; close other app instances first):
+
+```sh
+go run ./tools/quality task desktop-smoke
+```
 
 ## Run the platform spike
 

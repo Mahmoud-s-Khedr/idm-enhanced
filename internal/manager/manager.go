@@ -24,6 +24,7 @@ import (
 type Job = storage.Job
 type Options struct {
 	URL, Destination, SHA256 string
+	ScheduledAt              time.Time
 	Progress                 func(int64, int64)
 }
 type Manager struct {
@@ -74,17 +75,24 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
+	if o.Destination == "" {
+		return Job{}, errors.New("destination is required")
+	}
+	dest, err := filepath.Abs(o.Destination)
+	if err != nil {
+		return Job{}, err
+	}
 	pending := 0
 	for _, j := range jobs {
 		if j.State != "completed" && j.State != "cancelled" {
+			if j.Destination == dest {
+				return Job{}, errors.New("destination already belongs to an unfinished job")
+			}
 			pending++
 		}
 	}
 	if pending >= m.config.QueueLimit {
 		return Job{}, errors.New("queue limit reached")
-	}
-	if o.Destination == "" {
-		return Job{}, errors.New("destination is required")
 	}
 	u, err := url.Parse(o.URL)
 	if err != nil || u.User != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
@@ -93,10 +101,6 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	sum, err := hex.DecodeString(o.SHA256)
 	if err != nil || (o.SHA256 != "" && len(sum) != 32) {
 		return Job{}, errors.New("SHA-256 must contain 64 hexadecimal characters")
-	}
-	dest, err := filepath.Abs(o.Destination)
-	if err != nil {
-		return Job{}, err
 	}
 	parent, parentErr := os.Stat(filepath.Dir(dest))
 	if parentErr != nil || !parent.IsDir() {
@@ -109,7 +113,7 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	if _, err := rand.Read(id); err != nil {
 		return Job{}, err
 	}
-	j := Job{Version: 1, ID: hex.EncodeToString(id), Source: o.URL, Destination: dest, Checksum: o.SHA256, Length: -1, State: "queued", Created: time.Now().UTC()}
+	j := Job{Version: 1, ID: hex.EncodeToString(id), Source: o.URL, Destination: dest, Checksum: o.SHA256, Length: -1, State: "queued", Created: time.Now().UTC(), ScheduledAt: o.ScheduledAt.UTC()}
 	for _, existing := range jobs {
 		j.QueueOrder = max(j.QueueOrder, existing.QueueOrder+1)
 	}
@@ -128,7 +132,7 @@ func vacant(path string) error {
 }
 
 var transitions = map[string]string{
-	"queued":          " inspecting cancelled needs_attention",
+	"queued":          " inspecting paused cancelled needs_attention",
 	"inspecting":      " downloading paused needs_attention failed cancelled",
 	"downloading":     " pausing verifying paused needs_attention failed cancelled",
 	"pausing":         " paused failed needs_attention",

@@ -22,6 +22,9 @@ var migration string
 //go:embed migrations/002.sql
 var migrationM3 string
 
+//go:embed migrations/003.sql
+var migrationM4 string
+
 type Interval struct {
 	Start, End int64
 	Digest     string
@@ -37,6 +40,7 @@ type Job struct {
 	QueueOrder                                                   int64
 	RetryCount                                                   int
 	RetryAt                                                      time.Time
+	ScheduledAt                                                  time.Time
 }
 type Store struct {
 	db   *sql.DB
@@ -136,7 +140,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 2 || (readonly && version < 1) {
+	if version > 3 || (readonly && version < 1) {
 		return nil, errors.New("unsupported database version")
 	}
 	if !readonly {
@@ -146,7 +150,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 		if err = s.configure("synchronous", "FULL", "2"); err != nil {
 			return nil, err
 		}
-		for target, script := range []string{migration, migrationM3} {
+		for target, script := range []string{migration, migrationM3, migrationM4} {
 			if version > target {
 				continue
 			}
@@ -252,4 +256,27 @@ func (s *Store) configure(name, value, want string) error {
 		return errors.New("SQLite setting rejected: " + name)
 	}
 	return nil
+}
+
+// Preferences contains application settings, separate from transfer checkpoints.
+func (s *Store) Preferences(ctx context.Context) ([]byte, error) {
+	var b []byte
+	err := s.db.QueryRowContext(ctx, "SELECT record FROM preferences WHERE id=1").Scan(&b)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return b, err
+}
+func (s *Store) SavePreferences(ctx context.Context, b []byte) error {
+	if len(b) > 4096 || !json.Valid(b) {
+		return errors.New("invalid preferences")
+	}
+	_, err := s.db.ExecContext(ctx, "INSERT INTO preferences VALUES(1,?) ON CONFLICT(id) DO UPDATE SET record=excluded.record", b)
+	return err
+}
+
+// Delete removes metadata only; filesystem retention is owned by the manager.
+func (s *Store) Delete(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM jobs WHERE id=?", id)
+	return err
 }

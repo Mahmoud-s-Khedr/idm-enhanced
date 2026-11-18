@@ -5,11 +5,200 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as manager$0 from "../manager/models.js";
+
+export class Command {
+    "action": string;
+    "id": string;
+    "keepPartial": boolean;
+    "at": string;
+    "order": string[];
+
+    /** Creates a new Command instance. */
+    constructor($$source: Partial<Command> = {}) {
+        if (!("action" in $$source)) {
+            this["action"] = "";
+        }
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("keepPartial" in $$source)) {
+            this["keepPartial"] = false;
+        }
+        if (!("at" in $$source)) {
+            this["at"] = "";
+        }
+        if (!("order" in $$source)) {
+            this["order"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Command instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Command {
+        const $$createField4_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("order" in $$parsedSource) {
+            $$parsedSource["order"] = $$createField4_0($$parsedSource["order"]);
+        }
+        return new Command($$parsedSource as Partial<Command>);
+    }
+}
+
+export class DownloadRequest {
+    "url": string;
+    "destination": string;
+    "sha256": string;
+    "scheduled": string;
+
+    /** Creates a new DownloadRequest instance. */
+    constructor($$source: Partial<DownloadRequest> = {}) {
+        if (!("url" in $$source)) {
+            this["url"] = "";
+        }
+        if (!("destination" in $$source)) {
+            this["destination"] = "";
+        }
+        if (!("sha256" in $$source)) {
+            this["sha256"] = "";
+        }
+        if (!("scheduled" in $$source)) {
+            this["scheduled"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DownloadRequest instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DownloadRequest {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DownloadRequest($$parsedSource as Partial<DownloadRequest>);
+    }
+}
+
+/**
+ * JobView intentionally excludes source URLs, validators and ownership tokens.
+ */
+export class JobView {
+    "id": string;
+    "name": string;
+    "destination": string;
+    "host": string;
+    "state": string;
+    "error": string;
+    "bytes": number;
+    "total": number;
+    "order": number;
+    "scheduled": string;
+    "retryAt": string;
+
+    /** Creates a new JobView instance. */
+    constructor($$source: Partial<JobView> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("destination" in $$source)) {
+            this["destination"] = "";
+        }
+        if (!("host" in $$source)) {
+            this["host"] = "";
+        }
+        if (!("state" in $$source)) {
+            this["state"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("total" in $$source)) {
+            this["total"] = 0;
+        }
+        if (!("order" in $$source)) {
+            this["order"] = 0;
+        }
+        if (!("scheduled" in $$source)) {
+            this["scheduled"] = "";
+        }
+        if (!("retryAt" in $$source)) {
+            this["retryAt"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new JobView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): JobView {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new JobView($$parsedSource as Partial<JobView>);
+    }
+}
+
+export class Snapshot {
+    "jobs": JobView[];
+    "running": boolean;
+    "sleeping": boolean;
+    "message": string;
+    "settings": manager$0.Settings;
+
+    /** Creates a new Snapshot instance. */
+    constructor($$source: Partial<Snapshot> = {}) {
+        if (!("jobs" in $$source)) {
+            this["jobs"] = [];
+        }
+        if (!("running" in $$source)) {
+            this["running"] = false;
+        }
+        if (!("sleeping" in $$source)) {
+            this["sleeping"] = false;
+        }
+        if (!("message" in $$source)) {
+            this["message"] = "";
+        }
+        if (!("settings" in $$source)) {
+            this["settings"] = (new manager$0.Settings());
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Snapshot instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Snapshot {
+        const $$createField0_0 = $$createType2;
+        const $$createField4_0 = $$createType3;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("jobs" in $$parsedSource) {
+            $$parsedSource["jobs"] = $$createField0_0($$parsedSource["jobs"]);
+        }
+        if ("settings" in $$parsedSource) {
+            $$parsedSource["settings"] = $$createField4_0($$parsedSource["settings"]);
+        }
+        return new Snapshot($$parsedSource as Partial<Snapshot>);
+    }
+}
+
 export class Status {
     "build": string;
     "platform": string;
     "lastPing": string;
     "ipc": string;
+    "notification": string;
+    "lifecycle": string;
 
     /** Creates a new Status instance. */
     constructor($$source: Partial<Status> = {}) {
@@ -25,6 +214,12 @@ export class Status {
         if (!("ipc" in $$source)) {
             this["ipc"] = "";
         }
+        if (!("notification" in $$source)) {
+            this["notification"] = "";
+        }
+        if (!("lifecycle" in $$source)) {
+            this["lifecycle"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -37,3 +232,9 @@ export class Status {
         return new Status($$parsedSource as Partial<Status>);
     }
 }
+
+// Private type creation functions
+const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = JobView.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = manager$0.Settings.createFrom;

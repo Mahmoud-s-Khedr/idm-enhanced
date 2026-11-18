@@ -38,3 +38,15 @@ func TestDisconnectedBridge(t *testing.T) {
 		t.Fatal("bridge failure not presented")
 	}
 }
+
+func TestTrayFallback(t *testing.T) {
+	s := New("ready")
+	s.SetTrayAvailable(false)
+	if s.Info().Lifecycle != "No system tray host is available. Closing this window minimizes it to the taskbar; downloads keep running." {
+		t.Fatal(s.Info())
+	}
+	s.SetTrayAvailable(true)
+	if s.Info().Lifecycle != "Closing this window keeps downloads running in the system tray." {
+		t.Fatal(s.Info())
+	}
+}

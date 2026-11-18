@@ -7,7 +7,29 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as manager$0 from "../manager/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
+
+export function Add(r: $models.DownloadRequest): $CancellablePromise<string> {
+    return $Call.ByID(2619394847, r);
+}
+
+export function ChooseDestination(): $CancellablePromise<string> {
+    return $Call.ByID(2644998399);
+}
+
+export function Control(c: $models.Command): $CancellablePromise<void> {
+    return $Call.ByID(2931547865, c);
+}
+
+export function Downloads(): $CancellablePromise<$models.Snapshot> {
+    return $Call.ByID(2811249293).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
 
 export function Hello(): $CancellablePromise<string> {
     return $Call.ByID(753384052);
@@ -15,9 +37,18 @@ export function Hello(): $CancellablePromise<string> {
 
 export function Info(): $CancellablePromise<$models.Status> {
     return $Call.ByID(1029083128).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType1($result);
     });
 }
 
+export function Quit(): $CancellablePromise<void> {
+    return $Call.ByID(2933140931);
+}
+
+export function SaveSettings(p: manager$0.Settings): $CancellablePromise<void> {
+    return $Call.ByID(425045804, p);
+}
+
 // Private type creation functions
-const $$createType0 = $models.Status.createFrom;
+const $$createType0 = $models.Snapshot.createFrom;
+const $$createType1 = $models.Status.createFrom;

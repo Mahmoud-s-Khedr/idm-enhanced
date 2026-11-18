@@ -7,5 +7,9 @@ export {
 };
 
 export {
+    Command,
+    DownloadRequest,
+    JobView,
+    Snapshot,
     Status
 } from "./models.js";

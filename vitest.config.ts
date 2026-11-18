@@ -11,6 +11,9 @@ export default defineConfig({
       provider: 'v8',
       include: [
         'frontend/src/App.tsx',
+        'frontend/src/AddDownload.tsx',
+        'frontend/src/JobList.tsx',
+        'frontend/src/SettingsForm.tsx',
         'extensions/shared/src/connection.ts',
         'extensions/shared/src/popup.ts',
       ],
