@@ -62,7 +62,7 @@ The following passed on Fedora 45 amd64 with pinned tools:
   (109,127 executions, no failures)
 - `git diff --check`
 
-Critical Go coverage: engine 96.1%, manager 91.3%, storage 92.3%, media 92.8%.
+Critical Go coverage: engine 96.1%, manager 91.3%, storage 92.3%, media 92.7%.
 The 48 TS tests pass; statements 98.23%, branches 92.39%, functions 99.05%,
 lines 99.18%; unchanged per-file gates also pass. Desktop assets: raw 262,742 /
 303,185 bytes, gzip 84,550 / 103,429. Each extension: raw 9,271 / 11,195,
@@ -87,3 +87,15 @@ presentation offsets remain unsupported. Tools remain separately installed;
 packages remain unsigned internal candidates. Local Linux real playback does
 not establish Windows/macOS interactive playback. Beta-user feedback, physical
 power events, signing/naming and the public R1 checklist remain pending.
+
+## Review correction
+
+Automated review identified a fractional-duration boundary error: binary floating
+point could turn PT1.1S at timescale 100 into 111 ticks, requesting an extra
+fragment or rejecting a complete finite timeline. DASH durations now use bounded
+exact rational arithmetic through the integer tick ceiling. Regressions cover
+fixed-duration, finite and r=-1 timelines, exact decimal boundaries, nanosecond
+precision and a genuine fractional tick that still requires upward rounding.
+The float summary no longer determines addressing. Corrected-head full checks and
+hosted required checks must pass before merge; an earlier green head is not
+inherited as evidence.

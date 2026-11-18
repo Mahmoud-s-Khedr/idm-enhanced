@@ -132,3 +132,40 @@ func FuzzDASHManifest(f *testing.F) {
 	f.Add([]byte(`<MPD/>`))
 	f.Fuzz(func(t *testing.T, body []byte) { _, _ = ParseDASH(body, "https://example.invalid/manifest.mpd") })
 }
+
+func TestDASHFractionalDurationsUseExactPeriodTicks(t *testing.T) {
+	for _, test := range []struct {
+		duration, scale, segment string
+		objects                  int
+	}{
+		{"PT1.1S", "100", "110", 2},
+		{"PT0H0M1.10S", "100", "110", 2},
+		{"PT0.1S", "10", "1", 2},
+		{"PT0.000000001S", "1000000000", "1", 2},
+		// A real fractional tick still rounds upward and requires a second fragment.
+		{"PT1.1001S", "100", "110", 3},
+	} {
+		t.Run(test.duration, func(t *testing.T) {
+			base := strings.Replace(simpleMPD, `PT3S`, test.duration, 1)
+			base = strings.Replace(base, `timescale="10"`, `timescale="`+test.scale+`"`, 1)
+			for _, timeline := range []bool{false, true} {
+				body := strings.Replace(base, `duration="10"`, `duration="`+test.segment+`"`, 1)
+				if timeline {
+					body = strings.Replace(body, ` duration="`+test.segment+`"`, "", 1)
+					body = strings.Replace(body, `media="$RepresentationID$-$Number%03d$.m4s"/>`, `media="$RepresentationID$-$Number%03d$.m4s"><SegmentTimeline><S d="`+test.segment+`" r="-1"/></SegmentTimeline></SegmentTemplate>`, 1)
+				}
+				plans, err := ParseDASH([]byte(body), "https://example.invalid/index.mpd")
+				if err != nil || len(plans) != 1 || len(plans[0].Segments) != test.objects {
+					t.Fatal(timeline, plans, err)
+				}
+			}
+			// A finite one-segment timeline is complete only when it covers the exact end.
+			body := strings.Replace(base, ` duration="10"`, "", 1)
+			body = strings.Replace(body, `media="$RepresentationID$-$Number%03d$.m4s"/>`, `media="$RepresentationID$-$Number%03d$.m4s"><SegmentTimeline><S d="`+test.segment+`"/></SegmentTimeline></SegmentTemplate>`, 1)
+			_, err := ParseDASH([]byte(body), "https://example.invalid/index.mpd")
+			if (err == nil) != (test.objects == 2) {
+				t.Fatal("wrong exact finite timeline boundary", err)
+			}
+		})
+	}
+}

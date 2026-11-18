@@ -29,7 +29,7 @@ A representation may override attributes and inherit its parent's timeline.
 Initialization is mandatory. Media addressing supports Number, Time,
 RepresentationID, Bandwidth, escaped dollars and one-digit zero-padding widths.
 Fixed duration and contiguous SegmentTimeline t/d/r addressing are supported.
-Negative r=-1 repeats are expanded only up to a following explicit, aligned start
+Period duration decimals remain exact rational values (bounded to 128 characters) until the ceiling conversion to integer timescale ticks; floating point is used only for the duration summary. Negative r=-1 repeats are expanded only up to a following explicit, aligned start
 or the finite Period end; expansion is bounded before allocating resource lists.
 Timelines start at zero and cover the Period without gaps/overlaps. The final
 segment may overlap the Period end. presentationTimeOffset must be absent or zero.

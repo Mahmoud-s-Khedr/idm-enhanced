@@ -5,7 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"math"
+	"math/big"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -147,26 +147,43 @@ func parseDASHXML(body []byte) (*dashNode, error) {
 
 var dashDuration = regexp.MustCompile(`^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$`)
 
-func parseDuration(value string) (float64, error) {
+// MPD decimal durations must remain exact until conversion to timeline ticks.
+// Float64 is used only for the display/checkpoint duration summary.
+func parseDuration(value string) (*big.Rat, error) {
+	if len(value) > 128 {
+		return nil, ErrUnsupported
+	}
 	parts := dashDuration.FindStringSubmatch(value)
 	if parts == nil || value == "PT" {
-		return 0, ErrUnsupported
+		return nil, ErrUnsupported
 	}
-	total := 0.0
-	for i, scale := range []float64{3600, 60, 1} {
+	total := new(big.Rat)
+	for i, scale := range []int64{3600, 60, 1} {
 		if parts[i+1] != "" {
-			n, err := strconv.ParseFloat(parts[i+1], 64)
-			if err != nil {
-				return 0, ErrUnsupported
+			n, ok := new(big.Rat).SetString(parts[i+1])
+			if !ok {
+				return nil, ErrUnsupported
 			}
-			total += n * scale
+			total.Add(total, n.Mul(n, new(big.Rat).SetInt64(scale)))
 		}
 	}
-	if total < 0 || total > 86400 || math.IsInf(total, 0) {
-		return 0, ErrUnsupported
+	if total.Sign() < 0 || total.Cmp(new(big.Rat).SetInt64(86400)) > 0 {
+		return nil, ErrUnsupported
 	}
 	return total, nil
 }
+
+func dashEndTick(duration *big.Rat, scale int64) int64 {
+	scaled := new(big.Rat).Mul(duration, new(big.Rat).SetInt64(scale))
+	ticks, remainder := new(big.Int), new(big.Int)
+	ticks.QuoRem(scaled.Num(), scaled.Denom(), remainder)
+	if remainder.Sign() > 0 {
+		ticks.Add(ticks, big.NewInt(1))
+	}
+	// Duration and scale have already been bounded to 86,400 and 1e9.
+	return ticks.Int64()
+}
+
 func dashInt(value string, fallback int64) (int64, error) {
 	if value == "" {
 		return fallback, nil
@@ -226,7 +243,7 @@ type dashRepresentation struct {
 	objects                                []string
 }
 
-func dashRepresentationPlan(adapt, rep, template *dashNode, base string, duration float64) (dashRepresentation, error) {
+func dashRepresentationPlan(adapt, rep, template *dashNode, base string, duration *big.Rat) (dashRepresentation, error) {
 	r := dashRepresentation{id: rep.attrs["id"], language: adapt.attrs["lang"], codecs: inherit(rep, adapt, "codecs")}
 	if len(r.id) == 0 || len(r.id) > 128 || strings.ContainsAny(r.id, "/$%?#\\\x00\r\n") || len(r.language) > 35 {
 		return r, ErrUnsupported
@@ -280,7 +297,7 @@ func ParseDASH(body []byte, source string) ([]Plan, error) {
 	p := periods[0]
 	if p.attrs["start"] != "" {
 		start, e := parseDuration(p.attrs["start"])
-		if e != nil || start != 0 {
+		if e != nil || start.Sign() != 0 {
 			return nil, ErrUnsupported
 		}
 	}
@@ -288,12 +305,12 @@ func ParseDASH(body []byte, source string) ([]Plan, error) {
 	if root.attrs["mediaPresentationDuration"] == "" {
 		duration, err = parseDuration(p.attrs["duration"])
 	}
-	if err != nil || duration <= 0 {
+	if err != nil || duration.Sign() <= 0 {
 		return nil, ErrUnsupported
 	}
 	if p.attrs["duration"] != "" {
 		d, e := parseDuration(p.attrs["duration"])
-		if e != nil || d != duration {
+		if e != nil || d.Cmp(duration) != 0 {
 			return nil, ErrUnsupported
 		}
 	}
@@ -369,10 +386,11 @@ func ParseDASH(body []byte, source string) ([]Plan, error) {
 	if len(video)*len(audio) > 64 {
 		return nil, ErrLimit
 	}
+	durationSummary, _ := duration.Float64()
 	var plans []Plan
 	for _, v := range video {
 		for _, a := range audio {
-			plan := Plan{SourceDigest: hash(body), PlaylistDigest: hash(body), PlaylistURL: source, Duration: duration}
+			plan := Plan{SourceDigest: hash(body), PlaylistDigest: hash(body), PlaylistURL: source, Duration: durationSummary}
 			plan.Variant = Variant{ID: hash([]byte(v.id + "\x00" + a.id)), Bandwidth: v.bandwidth + a.bandwidth, Resolution: v.resolution, Codecs: strings.Trim(v.codecs+","+a.codecs, ",")}
 			if a.id != "" {
 				plan.Variant.Resolution += " audio " + a.language
@@ -392,7 +410,7 @@ func ParseDASH(body []byte, source string) ([]Plan, error) {
 	return plans, nil
 }
 
-func dashObjects(t *dashNode, source, id string, bandwidth int64, duration float64) ([]string, error) {
+func dashObjects(t *dashNode, source, id string, bandwidth int64, duration *big.Rat) ([]string, error) {
 	if t == nil || t.attrs["initialization"] == "" || t.attrs["media"] == "" {
 		return nil, ErrUnsupported
 	}
@@ -417,7 +435,7 @@ func dashObjects(t *dashNode, source, id string, bandwidth int64, duration float
 		return nil, err
 	}
 	result := []string{init}
-	end := int64(math.Ceil(duration * float64(scale)))
+	end := dashEndTick(duration, scale)
 	var times []int64
 	timeline, err := t.one("SegmentTimeline")
 	if err != nil {
