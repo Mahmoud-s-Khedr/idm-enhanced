@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"encoding/json"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/protocol"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -180,5 +181,40 @@ func TestDesktopBoundaryValidation(t *testing.T) {
 	}
 	if s.Control(Command{Action: "open", ID: "missing"}) == nil {
 		t.Fatal("closed backend opened file")
+	}
+}
+
+func TestBrowserDownloadAcceptance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	m, err := manager.Open(t.TempDir(), false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := manager.NewSession(m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+	service := New("test")
+	service.Attach(session, PlatformActions{})
+	request := protocol.Message{Version: 1, ID: "browser-ui", Type: "download", URL: "https://example.invalid/file", Filename: "file.bin"}
+	reply, err := service.Accept(request)
+	if err != nil || reply.Type != "accepted" || reply.JobID == "" {
+		t.Fatal(reply, err)
+	}
+	again, err := service.Accept(request)
+	if err != nil || again.JobID != reply.JobID {
+		t.Fatal(again, err)
+	}
+	request.URL = "https://example.invalid/other"
+	reply, err = service.Accept(request)
+	if err != nil || reply.Type != "error" {
+		t.Fatal(reply, err)
+	}
+	empty := New("test")
+	if r, err := empty.Accept(request); err != nil || r.Type != "error" {
+		t.Fatal(r, err)
 	}
 }

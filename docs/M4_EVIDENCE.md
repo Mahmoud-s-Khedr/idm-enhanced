@@ -148,3 +148,11 @@ and duplicate completed-job notices. Both passed 20 race-enabled repetitions.
 After these lifecycle corrections, `doctor`, `check`, `check:full` and
 `task desktop-smoke` passed again locally. Final-head hosted checks are required
 before protected merge.
+
+## Protected acceptance
+
+PR #6 merged as `02e7fb3133aa04b52dbee244662a6a38efa75c0d` on 2026-11-18.
+Final code head `12cb5bcec99e631a49301c914cbad853a42e153d` passed
+[Quality run 44288012297](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44288012297),
+including full quality, gate probes, history secrets, all three native jobs and
+Required checks. M4 is accepted; its interactive platform limitations remain.

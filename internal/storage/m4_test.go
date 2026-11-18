@@ -39,7 +39,7 @@ func TestM4PreferencesMigration(t *testing.T) {
 	if err = s.Save(ctx, j); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.db.Exec("DROP TABLE preferences; PRAGMA user_version=2"); err != nil {
+	if _, err = s.db.Exec("DROP TABLE browser_requests; DROP TABLE preferences; PRAGMA user_version=2"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {

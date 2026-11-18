@@ -16,6 +16,10 @@ export default defineConfig({
         'frontend/src/SettingsForm.tsx',
         'extensions/shared/src/connection.ts',
         'extensions/shared/src/popup.ts',
+        'extensions/shared/src/handoff.ts',
+        'extensions/shared/src/browser.ts',
+        'extensions/shared/src/background.ts',
+        'extensions/shared/src/handoff-state.ts',
       ],
       thresholds: {
         perFile: true,

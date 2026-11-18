@@ -7,4 +7,7 @@ export interface Message {
   id: string;
   type: string;
   error?: string;
+  url?: string;
+  filename?: string;
+  jobId?: string;
 }

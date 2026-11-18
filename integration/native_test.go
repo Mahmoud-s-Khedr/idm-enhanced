@@ -5,7 +5,12 @@ package integration
 import (
 	"bytes"
 	"context"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/ipc"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/protocol"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,5 +83,100 @@ func TestNativeHostProcess(t *testing.T) {
 				t.Fatal("invalid frame accepted or stdout polluted")
 			}
 		})
+	}
+}
+
+func TestNativeHostDownloadHandoff(t *testing.T) {
+	base := ""
+	if runtime.GOOS != "windows" {
+		base = "/tmp"
+	}
+	temporary, err := os.MkdirTemp(base, "idm-h-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(temporary) }()
+	host := filepath.Join(temporary, "native-host")
+	if runtime.GOOS == "windows" {
+		host += ".exe"
+	}
+	if b, err := exec.Command("go", "build", "-o", host, "../cmd/native-host").CombinedOutput(); err != nil {
+		t.Fatal(string(b), err)
+	}
+	t.Setenv("XDG_RUNTIME_DIR", temporary)
+	t.Setenv("HOME", temporary)
+	t.Setenv("USERPROFILE", temporary)
+	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("M5 verified bytes")) }))
+	defer fixture.Close()
+	m, err := manager.Open(filepath.Join(temporary, "state"), false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := manager.NewSession(m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+	service := desktop.New("test")
+	service.Attach(session, desktop.PlatformActions{})
+	l, err := ipc.Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- ipc.Serve(ctx, l, service.Accept) }()
+	request := protocol.Message{Version: 1, ID: "native-handoff", Type: "download", URL: fixture.URL + "/file", Filename: "fixture.bin"}
+	jobID := ""
+	for range 2 {
+		var input, output, diagnostics bytes.Buffer
+		if err := protocol.Write(&input, request); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.CommandContext(ctx, host)
+		cmd.Stdin = &input
+		cmd.Stdout = &output
+		cmd.Stderr = &diagnostics
+		if err := cmd.Run(); err != nil {
+			t.Fatal(err, diagnostics.String())
+		}
+		reply, err := protocol.Read(&output)
+		if err != nil || reply.Type != "accepted" {
+			t.Fatal(reply, err, diagnostics.String())
+		}
+		if jobID != "" && reply.JobID != jobID {
+			t.Fatal("duplicate native handoff")
+		}
+		jobID = reply.JobID
+	}
+	jobs, err := session.Jobs()
+	if err != nil || len(jobs) != 1 || jobs[0].State != "queued" {
+		t.Fatal(jobs, err)
+	}
+	if err := session.Start("", false); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		running, _, message := session.State()
+		if !running {
+			if message != "" {
+				t.Fatal(message)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("download timed out")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	output, err := os.ReadFile(filepath.Join(temporary, "Downloads", "fixture.bin"))
+	if err != nil || string(output) != "M5 verified bytes" {
+		t.Fatal(string(output), err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -1,54 +1,139 @@
 import { afterEach, expect, test, vi } from 'vitest';
 const send = vi.fn();
+const get = vi.fn();
+const set = vi.fn();
+const badge = vi.fn();
+const html =
+  '<form><input id="url" value="https://example.invalid/file"/><input id="filename"/><button type="submit">Queue</button></form><button id="retry">Retry</button><button id="connect">Connect</button><output></output>';
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
-  send.mockReset();
+  vi.clearAllMocks();
   document.body.innerHTML = '';
 });
-async function popup(firefox = false) {
-  document.body.innerHTML =
-    '<button>Test desktop connection</button><output></output>';
-  const runtime = { sendNativeMessage: send };
-  vi.stubGlobal('browser', firefox ? { runtime } : undefined);
-  vi.stubGlobal('chrome', { runtime });
+async function popup(firefox = false, saved: unknown = {}) {
+  document.body.innerHTML = html;
+  vi.stubGlobal('navigator', {
+    locks: {
+      request: async (_name: string, fn: () => Promise<unknown>) => fn(),
+    },
+  });
+  get.mockResolvedValue(saved);
+  set.mockResolvedValue(undefined);
+  badge.mockResolvedValue(undefined);
+  const api = {
+    runtime: { sendNativeMessage: send },
+    storage: { local: { get, set } },
+    action: { setBadgeText: badge },
+  };
+  vi.stubGlobal('browser', firefox ? api : undefined);
+  vi.stubGlobal('chrome', api);
   await import('./popup');
-  document.querySelector('button')?.click();
 }
-test('Chromium popup shows acknowledgement and restores button', async () => {
-  send.mockImplementation((_host, message: { id: string }) =>
-    Promise.resolve({ version: 1, id: message.id, type: 'ack' }),
+test('connection acknowledgement and actionable failures', async () => {
+  send.mockImplementation((_host, m: { id: string }) =>
+    Promise.resolve({ version: 1, id: m.id, type: 'ack' }),
   );
   await popup();
+  document.querySelector<HTMLButtonElement>('#connect')?.click();
   await vi.waitFor(() =>
     expect(document.querySelector('output')?.textContent).toContain(
       'Desktop acknowledged',
     ),
   );
   await vi.waitFor(() =>
-    expect(document.querySelector('button')?.disabled).toBe(false),
+    expect(
+      document.querySelector<HTMLButtonElement>('#connect')?.disabled,
+    ).toBe(false),
   );
-});
-test('Firefox popup presents actionable registration failure', async () => {
   send.mockRejectedValue(new Error('Host missing'));
-  await popup(true);
+  document.querySelector<HTMLButtonElement>('#connect')?.click();
   await vi.waitFor(() =>
     expect(document.querySelector('output')?.textContent).toContain(
       'Host missing',
     ),
   );
-});
-test('handles unknown errors', async () => {
   send.mockRejectedValue('offline');
-  await popup();
+  document.querySelector<HTMLButtonElement>('#connect')?.click();
   await vi.waitFor(() =>
     expect(document.querySelector('output')?.textContent).toContain(
       'Desktop connection failed',
     ),
   );
 });
-test('missing popup DOM fails explicitly', async () => {
+test('queues then retries the exact durable request after a lost reply', async () => {
+  await popup(true);
+  send.mockRejectedValue(new Error('lost reply'));
+  document
+    .querySelector('form')
+    ?.dispatchEvent(new Event('submit', { cancelable: true }));
+  await vi.waitFor(() => expect(set).toHaveBeenCalled());
+  await vi.waitFor(() =>
+    expect(document.querySelector<HTMLButtonElement>('#retry')?.disabled).toBe(
+      false,
+    ),
+  );
+  const record = set.mock.calls[0]?.[0] as {
+    handoff: { request: { id: string } };
+  };
+  get.mockResolvedValue(record);
+  send.mockImplementation((_host, m: { id: string }) =>
+    Promise.resolve({
+      version: 1,
+      id: m.id,
+      type: 'accepted',
+      jobId: 'durable',
+    }),
+  );
+  document.querySelector<HTMLButtonElement>('#retry')?.click();
+  await vi.waitFor(() =>
+    expect(document.querySelector('output')?.textContent).toContain(
+      'Queued in desktop',
+    ),
+  );
+  expect(send.mock.calls[1]?.[1]).toEqual(record.handoff.request);
+});
+test('restores saved feedback and reports storage failures', async () => {
+  await popup();
+  get.mockRejectedValue(new Error('storage'));
+  document.querySelector<HTMLButtonElement>('#retry')?.click();
+  await vi.waitFor(() =>
+    expect(document.querySelector('output')?.textContent).toContain('storage'),
+  );
+});
+test('missing DOM fails explicitly', async () => {
   vi.stubGlobal('browser', undefined);
-  vi.stubGlobal('chrome', { runtime: { sendNativeMessage: send } });
+  vi.stubGlobal('chrome', {});
   await expect(import('./popup')).rejects.toThrow('Popup elements missing');
+});
+
+test('shows saved outcome after popup reopen', async () => {
+  await popup(false, {
+    handoff: {
+      status: 'Already queued',
+      request: {
+        version: 1,
+        type: 'download',
+        id: 'id',
+        url: 'https://example.invalid/a',
+        filename: 'a',
+      },
+    },
+  });
+  await vi.waitFor(() =>
+    expect(document.querySelector('output')?.textContent).toBe(
+      'Already queued',
+    ),
+  );
+});
+
+test('empty retry does not send a new download', async () => {
+  await popup();
+  document.querySelector<HTMLButtonElement>('#retry')?.click();
+  await vi.waitFor(() =>
+    expect(document.querySelector('output')?.textContent).toContain(
+      'No saved handoff',
+    ),
+  );
+  expect(send).not.toHaveBeenCalled();
 });

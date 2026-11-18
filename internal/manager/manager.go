@@ -19,6 +19,7 @@ import (
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/engine"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/localfs"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/storage"
+	"golang.org/x/text/unicode/norm"
 )
 
 type Job = storage.Job
@@ -71,6 +72,9 @@ func (m *Manager) Status(ctx context.Context) ([]Job, error) { return m.store.Li
 func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.create(ctx, o, "", "")
+}
+func (m *Manager) create(ctx context.Context, o Options, requestID, fingerprint string) (Job, error) {
 	jobs, err := m.store.List(ctx)
 	if err != nil {
 		return Job{}, err
@@ -85,7 +89,7 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	pending := 0
 	for _, j := range jobs {
 		if j.State != "completed" && j.State != "cancelled" {
-			if j.Destination == dest {
+			if sameDestination(j.Destination, dest) {
 				return Job{}, errors.New("destination already belongs to an unfinished job")
 			}
 			pending++
@@ -117,10 +121,22 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	for _, existing := range jobs {
 		j.QueueOrder = max(j.QueueOrder, existing.QueueOrder+1)
 	}
-	if err := m.store.Save(ctx, j); err != nil {
-		return Job{}, err
+	var saveErr error
+	if requestID == "" {
+		saveErr = m.store.Save(ctx, j)
+	} else {
+		saveErr = m.store.SaveBrowser(ctx, j, requestID, fingerprint)
+	}
+	if saveErr != nil {
+		return Job{}, saveErr
 	}
 	return j, nil
+}
+
+// Reserve portable equivalents even on case-sensitive volumes, so queue behavior
+// is consistent when moved to Windows or a normalization-insensitive filesystem.
+func sameDestination(a, b string) bool {
+	return strings.EqualFold(norm.NFC.String(filepath.Clean(a)), norm.NFC.String(filepath.Clean(b)))
 }
 func vacant(path string) error {
 	if _, err := os.Lstat(path); err == nil {

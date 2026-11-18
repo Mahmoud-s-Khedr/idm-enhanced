@@ -7,12 +7,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/frontend"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/ipc"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/nativehost"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
@@ -38,11 +38,17 @@ func run() (result error) {
 	if err != nil {
 		return err
 	}
-	state := "Linux socket ready"
-	if runtime.GOOS != "linux" {
-		state = "Browser IPC deferred to M5 on this platform"
+	service := desktop.New("Browser bridge ready")
+	if executable, err := os.Executable(); err == nil {
+		suffix := ""
+		if filepath.Ext(executable) == ".exe" {
+			suffix = ".exe"
+		}
+		host := filepath.Join(filepath.Dir(executable), "native-host"+suffix)
+		if err := nativehost.Register(host, false); err != nil {
+			log.Print("Browser registration unavailable; run native-host --register after resolving an existing installation")
+		}
 	}
-	service := desktop.New(state)
 	service.SetTrayAvailable(trayAvailable())
 	notifier := &completionNotifications{service: notifications.New(), desktop: service}
 	session, err := manager.NewSession(m, func(j manager.Job) { notifier.send(j.ID) })
@@ -52,21 +58,7 @@ func run() (result error) {
 	defer func() { result = errors.Join(result, session.Close()) }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if runtime.GOOS == "linux" {
-		listener, err := ipc.Listen()
-		if err != nil {
-			return err
-		}
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			if err := ipc.Serve(ctx, listener, service.Accept); err != nil {
-				service.Disconnect()
-				log.Print("Browser bridge disconnected")
-			}
-		}()
-		defer func() { cancel(); _ = listener.Close(); <-done }()
-	}
+
 	app := application.New(application.Options{Name: "IDM Enhanced", Services: []application.Service{application.NewService(service), application.NewService(notifier)}, Assets: application.AssetOptions{Handler: application.AssetFileServerFS(frontend.Assets)}, OnShutdown: func() {
 		if err := session.Close(); err != nil {
 			log.Print("Download shutdown failed")
@@ -85,6 +77,21 @@ func run() (result error) {
 			return app.Browser.OpenFile(path)
 		}, Quit: app.Quit, AuthorizeNotifications: notifier.authorize,
 	})
+	{
+		listener, err := ipc.Listen()
+		if err != nil {
+			return err
+		}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if err := ipc.Serve(ctx, listener, service.Accept); err != nil {
+				service.Disconnect()
+				log.Print("Browser bridge disconnected")
+			}
+		}()
+		defer func() { cancel(); _ = listener.Close(); <-done }()
+	}
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon())
 	tray.SetTooltip("IDM Enhanced — downloads continue while hidden")

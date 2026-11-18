@@ -25,6 +25,9 @@ var migrationM3 string
 //go:embed migrations/003.sql
 var migrationM4 string
 
+//go:embed migrations/004.sql
+var migrationM5 string
+
 type Interval struct {
 	Start, End int64
 	Digest     string
@@ -140,7 +143,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 3 || (readonly && version < 1) {
+	if version > 4 || (readonly && version < 1) {
 		return nil, errors.New("unsupported database version")
 	}
 	if !readonly {
@@ -150,7 +153,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 		if err = s.configure("synchronous", "FULL", "2"); err != nil {
 			return nil, err
 		}
-		for target, script := range []string{migration, migrationM3, migrationM4} {
+		for target, script := range []string{migration, migrationM3, migrationM4, migrationM5} {
 			if version > target {
 				continue
 			}
@@ -181,7 +184,11 @@ func (s *Store) Close() error {
 func (s *Store) Save(ctx context.Context, j Job) error { return s.SaveBatch(ctx, []Job{j}) }
 
 // SaveBatch commits a manager-owned queue reorder atomically.
-func (s *Store) SaveBatch(ctx context.Context, jobs []Job) (err error) {
+func (s *Store) SaveBatch(ctx context.Context, jobs []Job) error {
+	return s.saveBatch(ctx, jobs, "", "")
+}
+
+func (s *Store) saveBatch(ctx context.Context, jobs []Job, requestID, fingerprint string) (err error) {
 	// database/sql may win the cancellation race by rolling the transaction
 	// back before Commit, returning ErrTxDone instead of the context cause.
 	// Preserve both so callers still checkpoint/pause and classify interruption.
@@ -193,6 +200,12 @@ func (s *Store) SaveBatch(ctx context.Context, jobs []Job) (err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
+	}
+	if requestID != "" {
+		_, err = tx.ExecContext(ctx, "INSERT INTO browser_requests VALUES(?,?,?)", requestID, fingerprint, jobs[0].ID)
+		if err != nil {
+			return errors.Join(err, tx.Rollback())
+		}
 	}
 	for _, j := range jobs {
 		if j.Version != 1 {
@@ -287,4 +300,23 @@ func (s *Store) SavePreferences(ctx context.Context, b []byte) error {
 func (s *Store) Delete(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM jobs WHERE id=?", id)
 	return err
+}
+
+// BrowserRequest returns the durable receipt even if history was removed.
+func (s *Store) BrowserRequest(ctx context.Context, id string) (fingerprint, jobID string, err error) {
+	err = s.db.QueryRowContext(ctx, "SELECT fingerprint,job_id FROM browser_requests WHERE request_id=?", id).Scan(&fingerprint, &jobID)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return
+}
+func (s *Store) SaveBrowser(ctx context.Context, j Job, id, fingerprint string) error {
+	var count int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM browser_requests").Scan(&count); err != nil {
+		return err
+	}
+	if count >= 10000 {
+		return errors.New("browser receipt limit reached")
+	}
+	return s.saveBatch(ctx, []Job{j}, id, fingerprint)
 }
