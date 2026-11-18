@@ -26,7 +26,7 @@ jobs:
         with:
           version: 12.21.0
           run_install: false
-      - run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+      - run: sudo sh tools/install-ubuntu-deps.sh
       - run: go run ./tools/quality bootstrap
       - run: go run ./tools/quality check:full
       - run: go run ./tools/quality task history-secrets
@@ -50,7 +50,7 @@ jobs:
           version: 12.21.0
           run_install: false
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+        run: sudo sh tools/install-ubuntu-deps.sh
       - run: go run ./tools/quality bootstrap-deps
       - run: go run ./tools/quality task build
       - run: go test -vet=off -count=1 ./...

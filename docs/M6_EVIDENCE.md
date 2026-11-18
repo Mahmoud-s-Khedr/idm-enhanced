@@ -98,6 +98,13 @@ without restarting. Focused manager/desktop race tests cover this correction.
 
 ## Acceptance boundary
 
+Hosted Ubuntu native provisioning stalled on its regional EC2 apt mirror,
+including a fresh-runner retry. The shared hosted-Ubuntu bootstrap now replaces
+only EC2 archive URIs with Ubuntu's HTTPS public archive and bounds apt network
+waits/retries. Signed repository verification, packages and required jobs are
+unchanged. Other distro packaging jobs keep their native repositories. This is
+provisioning resilience, not a platform/test exclusion.
+
 See [support and recovery guide](SUPPORT.md) for the platform/source matrix,
 manual checksum-verified update/rollback process and remaining release work.
 Unsigned 0.6.0 artifacts stay in the internal test channel. Beta-user feedback is
