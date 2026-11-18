@@ -54,7 +54,7 @@ The following passed locally with pinned toolchains on Linux amd64:
 - `git diff --check`
 
 `go run ./tools/quality gate-probes` also passed all 20 rejection/integrity checks.
-Statement coverage: engine 95.7%, manager 93.1%, storage 91.3%, desktop 95.0%.
+Statement coverage: engine 95.7%, manager 92.8%, storage 91.3%, desktop 95.0%.
 Existing critical 90% and other 80% thresholds remain unchanged. Every new
 handwritten frontend module meets 80/80/80/75 per-file thresholds. Gitleaks and
 local-target govulncheck reported no findings. pnpm audit retained the existing
@@ -135,3 +135,16 @@ are never reclassified solely because cancellation happened afterward.
 
 After both corrections, `check:full` and the real native WebView smoke passed
 again locally. Final hosted checks independently validate the updated head.
+
+Two additional review regressions cover asynchronous admission and notification
+timing. Individual Pause now cancels and joins a reserved individual run before
+acknowledgement, including when its worker has not entered the manager. Queue
+completion callbacks now run after each job's verified finalization, rather than
+after the entire drain. A deterministic admission barrier verifies no HTTP
+request follows an acknowledged pause; a stalled-peer fixture requires the small
+file's notification while the drain remains active and rejects interrupted-job
+and duplicate completed-job notices. Both passed 20 race-enabled repetitions.
+
+After these lifecycle corrections, `doctor`, `check`, `check:full` and
+`task desktop-smoke` passed again locally. Final-head hosted checks are required
+before protected merge.

@@ -22,7 +22,9 @@ ownership of retries, checkpoints, identity validation and exclusive publication
 Storage preserves the context cancellation cause alongside database/sql's
 automatic-rollback ErrTxDone so interruption is still classified as a pause.
 Queue cancellation/removal/reordering require Pause all and completion of the join.
-Individual Pause cancels an active job or pauses an idle queued job.
+Individual Pause cancels and joins a reserved individual run, including the gap
+before manager admission, or cancels an active queue job / pauses an idle queued
+job. Acknowledged pause cannot be overtaken by that reserved run.
 
 Removing history never deletes a completed output. Unfinished retained partials
 must be explicitly discarded through cancellation before removing their record.
@@ -73,7 +75,11 @@ OS shutdown and signals use Wails shutdown to checkpoint/join and release SQLite
 ownership. System sleep/wake hooks forward to Session; actual OS power-event
 coverage is separate from deterministic lifecycle tests.
 
-Optional native notifications use Wails' existing notification service. OS
+Optional native notifications use Wails' existing notification service. Each
+queue worker delivers its completion callback after verified finalization and
+before returning to the drain; a stalled peer cannot defer completed-job notices.
+Callbacks are joined with the run, and reopening a completed job does not repeat
+a notice. OS
 authorization is an explicit settings action; completion never opens a permission
 prompt while shutdown is joining work. Failure
 or denied authorization is visible in the app; completion/history remains

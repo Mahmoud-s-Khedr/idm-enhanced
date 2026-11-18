@@ -17,6 +17,8 @@ type Session struct {
 	mu               sync.Mutex
 	cancel           context.CancelFunc
 	done             chan struct{}
+	runID            string
+	beforeRun        func(context.Context) // Test synchronization before asynchronous manager admission.
 	closed, sleeping bool
 	schedulingPaused bool
 	failure          string
@@ -141,10 +143,13 @@ func (s *Session) start(id string, restart bool) error {
 		return err
 	}
 	// Validate before acknowledging asynchronous admission.
+	wasCompleted := false
 	if id != "" {
-		if _, err := s.manager.store.Get(context.Background(), id); err != nil {
+		j, err := s.manager.store.Get(context.Background(), id)
+		if err != nil {
 			return err
 		}
+		wasCompleted = j.State == "completed"
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -155,45 +160,55 @@ func (s *Session) start(id string, restart bool) error {
 	done := make(chan struct{})
 	s.cancel = cancel
 	s.done = done
+	s.runID = id
 	s.failure = ""
 	go func() {
-		before, err := s.manager.Status(ctx)
-		if err == nil {
-			if id == "" {
-				err = s.manager.RunQueue(ctx)
-			} else {
-				err = s.manager.Run(ctx, id, restart, nil)
+		if s.beforeRun != nil {
+			s.beforeRun(ctx)
+		}
+		var err error
+		if id == "" {
+			err = s.manager.runQueue(ctx, s.completed)
+		} else {
+			err = s.manager.Run(ctx, id, restart, nil)
+			if err == nil && !wasCompleted {
+				s.completed(id)
 			}
 		}
-		after, listErr := s.manager.Status(context.Background())
 		s.mu.Lock()
 		if err != nil && !errors.Is(err, context.Canceled) {
 			s.failure = "Some downloads need attention. Check their status and retry."
 		}
-		if listErr != nil {
-			s.failure = "Unable to read download status."
-		}
-		notifications := s.settings.Notifications
 		s.mu.Unlock()
-		if listErr == nil && notifications && s.notify != nil {
-			completed := make(map[string]bool, len(before))
-			for _, j := range before {
-				completed[j.ID] = j.State == "completed"
-			}
-			for _, j := range after {
-				if j.State == "completed" && !completed[j.ID] {
-					s.notify(j)
-				}
-			}
-		}
 		cancel()
 		s.mu.Lock()
 		s.cancel = nil
 		s.done = nil
+		s.runID = ""
 		close(done)
 		s.mu.Unlock()
 	}()
 	return nil
+}
+
+// completed runs after verified finalization, before the worker is joined.
+func (s *Session) completed(id string) {
+	s.mu.Lock()
+	enabled := s.settings.Notifications
+	s.mu.Unlock()
+	if !enabled || s.notify == nil {
+		return
+	}
+	j, err := s.manager.store.Get(context.Background(), id)
+	if err != nil {
+		s.mu.Lock()
+		s.failure = "Unable to read download status."
+		s.mu.Unlock()
+		return
+	}
+	if j.State == "completed" {
+		s.notify(j)
+	}
 }
 func (s *Session) stop() {
 	s.mu.Lock()
@@ -220,6 +235,7 @@ func (s *Session) Command(action, id string, keep bool, at time.Time, order []st
 	}
 	s.mu.Lock()
 	busy := s.done != nil
+	individual := busy && s.runID == id && id != ""
 	s.mu.Unlock()
 	if busy && action != "pause" {
 		return errors.New("pause all downloads before changing jobs")
@@ -227,6 +243,15 @@ func (s *Session) Command(action, id string, keep bool, at time.Time, order []st
 	ctx := context.Background()
 	switch action {
 	case "pause":
+		if individual {
+			// Cancel and join even when the run is reserved but not yet active.
+			s.stop()
+			j, err := s.manager.store.Get(ctx, id)
+			if err != nil || j.State == "paused" {
+				return err
+			}
+			return s.manager.PauseQueued(ctx, id)
+		}
 		if err := s.manager.Pause(id); err == nil {
 			return nil
 		}

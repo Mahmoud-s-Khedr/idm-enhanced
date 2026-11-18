@@ -181,6 +181,10 @@ func (m *Manager) Reorder(ctx context.Context, ids []string) error {
 // RunQueue drains a bounded snapshot of queued jobs. New enqueues are left for
 // the next invocation. One failed job does not cancel unrelated queued jobs.
 func (m *Manager) RunQueue(ctx context.Context) error {
+	return m.runQueue(ctx, nil)
+}
+
+func (m *Manager) runQueue(ctx context.Context, completed func(string)) error {
 	m.mu.Lock()
 	if m.queueRunning || len(m.active) > 0 {
 		m.mu.Unlock()
@@ -209,7 +213,13 @@ func (m *Manager) RunQueue(ctx context.Context) error {
 			id := queue[next].ID
 			next++
 			active++
-			go func() { results <- m.run(ctx, id, false, nil, true) }()
+			go func() {
+				err := m.run(ctx, id, false, nil, true)
+				if err == nil && completed != nil {
+					completed(id)
+				}
+				results <- err
+			}()
 		}
 		if active == 0 {
 			break
