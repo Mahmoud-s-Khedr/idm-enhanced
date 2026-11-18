@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M3 implemented; protected acceptance is tracked in M3_EVIDENCE.md. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M3 delivered; protected acceptance is tracked in M3_EVIDENCE.md. M4 desktop alpha is next. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 

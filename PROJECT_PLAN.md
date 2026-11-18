@@ -1,16 +1,16 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M2 accepted; M3 implemented pending protected acceptance; M4 desktop alpha follows
+Status: M0–M3 delivered; M3 acceptance follows PR #5's protected merge; M4 desktop alpha is next
 
 Date: 2026-11-16
 
-Updated: 2026-11-18 — M3 implementation; acceptance tracked in docs/M3_EVIDENCE.md
+Updated: 2026-11-18 — M3 local and native hosted evidence; see docs/M3_EVIDENCE.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 
 Target: Windows, macOS, and Linux desktop
 
-Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI; later features remain planned.
+Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI. [M2 evidence](docs/M2_EVIDENCE.md) covers persistence/recovery and [M3 evidence](docs/M3_EVIDENCE.md) covers parallel transfers, queues and shared limits; desktop workflows and media remain planned.
 
 ## 1. Project direction
 

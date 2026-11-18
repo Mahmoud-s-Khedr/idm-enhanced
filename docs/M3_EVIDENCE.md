@@ -1,7 +1,8 @@
 # M3: Parallel engine and manager
 
-Updated: 2026-11-18. Local validation passed; hosted acceptance is pending.
-Acceptance requires the protected merge of this milestone's PR.
+Updated: 2026-11-18. Local and native hosted validation are recorded below.
+Final acceptance follows [PR #5](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/5)'s
+required checks and protected merge. Each subsequent head must pass independently.
 
 ## Delivered behavior
 
@@ -49,8 +50,28 @@ CLI 95.9%. Critical thresholds remain 90% per package. Gitleaks and govulncheck
 reported no findings. pnpm audit retained the existing reviewed development-only
 picomatch applicability exception, expiring 2026-12-01; raw findings remain visible.
 
-Native Windows/macOS results and the required aggregate must pass on the hosted
-PR head before merge; local results do not establish those platform behaviors.
+## Hosted platform evidence
+
+[Run 44206257863](https://github.com/Mahmoud-s-Khedr/idm-enhanced/actions/runs/44206257863)
+at implementation head `e6881830adc639f0883202acce7b9c81f1ba3748` passed all three
+native jobs:
+
+| Runner       | Actual target | Recorded result                                                                                               |
+| ------------ | ------------- | ------------------------------------------------------------------------------------------------------------- |
+| ubuntu-24.04 | linux/amd64   | Build, ordinary tests including sequential/parallel process-kill recovery, CLI/native-host integration passed |
+| windows-2025 | windows/amd64 | Build, ordinary tests including sequential/parallel process-kill recovery, native-host integration passed     |
+| macos-15     | darwin/arm64  | Build, ordinary tests including sequential/parallel process-kill recovery, CLI/native-host integration passed |
+
+The Windows CLI SIGINT-delivery fixture remains explicitly skipped because Go
+cannot send os.Interrupt there; context cancellation and real process-kill
+recovery are tested. macOS reported 15.8.2 (24H232); older releases are not
+established by this runner. Toolchain and dependency pins remain unchanged.
+
+This baseline records native results, not the quality job's final result. The
+[final PR checks](https://github.com/Mahmoud-s-Khedr/idm-enhanced/pull/5/checks)
+independently require full quality checks, all gate probes, the history secret scan,
+all three native jobs and the protected Required checks aggregate before merge.
+Strict up-to-date protection includes admins; no bypass is used.
 Thresholds, exclusions, required jobs and dependency pins remain unchanged.
 
 ## Limits
