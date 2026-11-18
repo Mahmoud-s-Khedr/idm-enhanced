@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M3 delivered; protected acceptance is tracked in M3_EVIDENCE.md. M4 desktop alpha is next. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M4 desktop alpha implemented; protected acceptance is tracked in M4_EVIDENCE.md. M3 PR #5 is merged. M5 browser handoff is next. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
@@ -53,3 +53,10 @@ The dependency gate retains high/critical enforcement and has one expiring,
 version- and development-scope-specific applicability review for
 [GHSA-fc5q-39xc-vjpf](security/GHSA-fc5q-39xc-vjpf.md). Raw audit findings remain
 visible; expired, changed-scope and unrelated high/critical findings fail.
+
+M4 desktop/manager/session, schedule/settings migration, frontend workflow and
+redaction fixtures are active under the existing coverage thresholds.
+`task desktop-smoke` is an explicit display-dependent native acceptance task;
+ordinary headless checks do not silently claim it ran. The test driver is excluded
+from production by the `desktop_smoke` build tag. Existing required CI jobs and
+thresholds remain unchanged. See M4_EVIDENCE.md for exact native limitations.

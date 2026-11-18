@@ -235,6 +235,8 @@ func task(n string) error {
 		return javascriptAudit()
 	case "staged":
 		return staged()
+	case "desktop-smoke":
+		return command("node", "tools/desktop-smoke.mjs")
 	case "browser-smoke":
 		return command("node", "tools/browser-smoke.mjs")
 	case "platform-info":

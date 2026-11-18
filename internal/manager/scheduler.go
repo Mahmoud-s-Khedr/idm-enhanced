@@ -181,6 +181,10 @@ func (m *Manager) Reorder(ctx context.Context, ids []string) error {
 // RunQueue drains a bounded snapshot of queued jobs. New enqueues are left for
 // the next invocation. One failed job does not cancel unrelated queued jobs.
 func (m *Manager) RunQueue(ctx context.Context) error {
+	return m.runQueue(ctx, nil)
+}
+
+func (m *Manager) runQueue(ctx context.Context, completed func(string)) error {
 	m.mu.Lock()
 	if m.queueRunning || len(m.active) > 0 {
 		m.mu.Unlock()
@@ -194,6 +198,13 @@ func (m *Manager) RunQueue(ctx context.Context) error {
 		return err
 	}
 	queue := queueJobs(jobs)
+	due := queue[:0]
+	for _, j := range queue {
+		if j.ScheduledAt.IsZero() || !j.ScheduledAt.After(time.Now()) {
+			due = append(due, j)
+		}
+	}
+	queue = due
 	results := make(chan error, m.config.Jobs)
 	next, active := 0, 0
 	var failure error
@@ -202,7 +213,13 @@ func (m *Manager) RunQueue(ctx context.Context) error {
 			id := queue[next].ID
 			next++
 			active++
-			go func() { results <- m.run(ctx, id, false, nil, true) }()
+			go func() {
+				err := m.run(ctx, id, false, nil, true)
+				if err == nil && completed != nil {
+					completed(id)
+				}
+				results <- err
+			}()
 		}
 		if active == 0 {
 			break
@@ -211,4 +228,54 @@ func (m *Manager) RunQueue(ctx context.Context) error {
 		active--
 	}
 	return errors.Join(failure, ctx.Err())
+}
+
+// Schedule persists an absolute UTC start instant. Zero clears the schedule.
+func (m *Manager) Schedule(ctx context.Context, id string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.active) > 0 || m.queueRunning {
+		return errors.New("manager is busy")
+	}
+	j, err := m.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if j.State != "queued" {
+		return errors.New("only queued jobs can be scheduled")
+	}
+	j.ScheduledAt = at.UTC()
+	return m.store.Save(ctx, j)
+}
+func (m *Manager) PauseQueued(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.active) > 0 || m.queueRunning {
+		return errors.New("manager is busy")
+	}
+	j, err := m.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if j.State != "queued" {
+		return errors.New("job is not queued")
+	}
+	return m.transition(ctx, &j, "paused")
+}
+
+// Remove never deletes a completed file. Unfinished jobs must be cancelled first.
+func (m *Manager) Remove(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.active) > 0 || m.queueRunning {
+		return errors.New("manager is busy")
+	}
+	j, err := m.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if (j.State != "completed" && j.State != "cancelled") || (j.State != "completed" && j.Partial != "") {
+		return errors.New("cancel and discard partial data before removing unfinished history")
+	}
+	return m.store.Delete(ctx, id)
 }

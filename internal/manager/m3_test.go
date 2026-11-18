@@ -333,7 +333,7 @@ func TestRetries(t *testing.T) {
 					return
 				}
 				if mode == "cancel wait" {
-					w.Header().Set("Retry-After", "2")
+					w.Header().Set("Retry-After", "60")
 					w.WriteHeader(503)
 					return
 				}
@@ -357,13 +357,18 @@ func TestRetries(t *testing.T) {
 					return nil
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
+			timeout := time.Second
 			if mode == "cancel wait" {
-				ctx, cancel = context.WithTimeout(ctx, 30*time.Millisecond)
-				defer cancel()
+				timeout = 5 * time.Second
 			}
-			err := m.Run(ctx, j.ID, false, nil)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			var err error
+			if mode == "cancel wait" {
+				err = cancelDuringRetry(t, ctx, cancel, m, j.ID)
+			} else {
+				err = m.Run(ctx, j.ID, false, nil)
+			}
 			success := mode == "success" || mode == "nonvalidator" || mode == "truncated"
 			if (err == nil) != success {
 				t.Fatal(mode, err)
@@ -608,5 +613,37 @@ func TestExhaustedBudgetPreservesRetryAfter(t *testing.T) {
 				t.Fatal("resume issued an early request", calls.Load())
 			}
 		})
+	}
+}
+
+// Wait for the behavior under test, not a wall-clock guess that may expire
+// before SQLite allocation or the first HTTP request on a loaded native runner.
+func cancelDuringRetry(t *testing.T, ctx context.Context, cancel context.CancelFunc, m *Manager, id string) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- m.Run(ctx, id, false, nil) }()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		saved, err := m.store.Get(ctx, id)
+		if err == nil && saved.State == "retry_wait" {
+			cancel()
+			result := <-done
+			if !errors.Is(result, context.Canceled) {
+				t.Fatalf("retry wait did not propagate cancellation: %v", result)
+			}
+			return result
+		}
+		select {
+		case result := <-done:
+			t.Fatalf("run ended before persisted retry wait: %v", result)
+			return result
+		case <-ctx.Done():
+			cancel()
+			result := <-done
+			t.Fatalf("never reached retry wait: %v", result)
+			return result
+		case <-ticker.C:
+		}
 	}
 }

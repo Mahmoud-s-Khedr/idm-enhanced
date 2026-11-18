@@ -204,7 +204,9 @@ func probes() error {
 		s := "package engine\n"
 		switch mode {
 		case "boundary":
-			s += "import _ \"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop\"\n"
+			// Desktop now imports manager/engine; use the equally forbidden frontend
+			// assets package so depguard, rather than an import cycle, rejects it.
+			s += "import _ \"github.com/Mahmoud-s-Khedr/idm-enhanced/frontend\"\n"
 		case "storage-boundary":
 			s += "import _ \"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/storage\"\n"
 		default:
