@@ -7,13 +7,16 @@ if ($p.ExitCode -ne 0) { throw "Predecessor install failed: $($p.ExitCode)" }
 $fixtureState = Join-Path $env:RUNNER_TEMP 'idm-upgrade-state'
 $fixtureDest = Join-Path $env:RUNNER_TEMP 'idm-retained.bin'
 $cli = Join-Path $install 'downloader.exe'
-& $cli --state-dir $fixtureState enqueue -o $fixtureDest https://example.invalid/retained
+$seed = & $cli --state-dir $fixtureState enqueue -o $fixtureDest https://example.invalid/retained 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'Could not seed durable upgrade job' }
-$before = & $cli --state-dir $fixtureState status
+if (($seed -join "`n") -notmatch '^Job: ([0-9a-f]{32})$') { throw 'Could not identify seeded upgrade job' }
+$jobId = $Matches[1]
+$before = & $cli --state-dir $fixtureState status $jobId 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'Could not read predecessor jobs' }
+if (($before -join "`n") -notmatch "^$jobId state=queued durable=0 ") { throw 'Seeded queued job missing before upgrade' }
 $p = Start-Process $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "Install failed: $($p.ExitCode)" }
-$after = & $cli --state-dir $fixtureState status
+$after = & $cli --state-dir $fixtureState status $jobId 2>&1
 if ($LASTEXITCODE -ne 0 -or ($before -join "`n") -ne ($after -join "`n")) { throw 'Upgrade changed durable jobs' }
 $hostExe = Join-Path $install 'native-host.exe'
 if (!(Test-Path $hostExe)) { throw 'Native host missing' }

@@ -11,13 +11,21 @@ case "$format" in
  rpm) dnf install -y build/predecessor/*.rpm ;;
  *) exit 1 ;;
 esac
-/usr/lib/idm-enhanced/downloader --state-dir "$scratch/state" enqueue -o "$scratch/retained.bin" https://example.invalid/retained
-before=$(/usr/lib/idm-enhanced/downloader --state-dir "$scratch/state" status)
+seed=$(/usr/lib/idm-enhanced/downloader --state-dir "$scratch/state" enqueue -o "$scratch/retained.bin" https://example.invalid/retained 2>&1)
+case "$seed" in
+ 'Job: '*) job_id=${seed#Job: } ;;
+ *) echo 'Could not identify seeded upgrade job' >&2; exit 1 ;;
+esac
+before=$(/usr/lib/idm-enhanced/downloader --state-dir "$scratch/state" status "$job_id" 2>&1)
+case "$before" in
+ "$job_id state=queued durable=0 "*) ;;
+ *) echo 'Seeded queued job missing before upgrade' >&2; exit 1 ;;
+esac
 case "$format" in
  deb) dpkg -i build/packages/*.deb ;;
  rpm) dnf install -y build/packages/*.rpm ;;
 esac
-after=$(/usr/lib/idm-enhanced/downloader --state-dir "$scratch/state" status)
+after=$(/usr/lib/idm-enhanced/downloader --state-dir "$scratch/state" status "$job_id" 2>&1)
 test "$before" = "$after"
 ldd /usr/lib/idm-enhanced/desktop
 if ldd /usr/lib/idm-enhanced/desktop | grep -q 'not found'; then exit 1; fi

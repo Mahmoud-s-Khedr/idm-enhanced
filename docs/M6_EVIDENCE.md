@@ -98,6 +98,14 @@ without restarting. Focused manager/desktop race tests cover this correction.
 
 ## Acceptance boundary
 
+A second review found that CLI status is written to stderr, while the initial
+upgrade smoke captured stdout. Both package scripts now explicitly capture
+stderr, extract the seeded job ID, require its queued/zero-progress record before
+upgrade and request that exact ID afterward. Missing jobs fail the installed CLI
+command; changed/nonempty snapshots fail comparison. Earlier green comparisons
+are not treated as durable-retention evidence; corrected final-head package
+checks must pass before protected merge.
+
 Hosted Ubuntu native provisioning stalled on its regional EC2 apt mirror,
 including a fresh-runner retry. The shared hosted-Ubuntu bootstrap now replaces
 regional archive URIs with Ubuntu's HTTPS public archive in both source files
