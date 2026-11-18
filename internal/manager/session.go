@@ -26,6 +26,9 @@ type Session struct {
 	clockCancel      context.CancelFunc
 	clockDone        chan struct{}
 	notify           func(Job)
+	analysisContext  context.Context
+	analysisCancel   context.CancelFunc
+	analyses         sync.WaitGroup
 }
 type Settings struct {
 	Workers       int   `json:"workers"`
@@ -52,6 +55,7 @@ func NewSession(m *Manager, notify func(Job)) (*Session, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	s.analysisContext, s.analysisCancel = context.WithCancel(context.Background())
 	s.clockCancel = cancel
 	go func() {
 		defer close(s.clockDone)
@@ -225,7 +229,14 @@ func (s *Session) PauseAll() {
 	s.mu.Lock()
 	s.schedulingPaused = true
 	s.mu.Unlock()
+	s.analysisCancel()
 	s.stop()
+	s.analyses.Wait()
+	s.mu.Lock()
+	if !s.closed && !s.sleeping {
+		s.analysisContext, s.analysisCancel = context.WithCancel(context.Background())
+	}
+	s.mu.Unlock()
 }
 func (s *Session) Command(action, id string, keep bool, at time.Time, order []string) error {
 	s.commands.Lock()
@@ -277,9 +288,20 @@ func (s *Session) Sleep() {
 	s.mu.Lock()
 	s.sleeping = true
 	s.mu.Unlock()
+	s.analysisCancel()
 	s.stop()
+	s.analyses.Wait()
 }
-func (s *Session) Wake() { s.mu.Lock(); s.sleeping = false; s.mu.Unlock() }
+func (s *Session) Wake() {
+	s.commands.Lock()
+	defer s.commands.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sleeping = false
+	if !s.closed && s.analysisContext.Err() != nil {
+		s.analysisContext, s.analysisCancel = context.WithCancel(context.Background())
+	}
+}
 func (s *Session) tick(now time.Time) {
 	s.commands.Lock()
 	defer s.commands.Unlock()
@@ -321,8 +343,10 @@ func (s *Session) Close() error {
 	s.closed = true
 	s.mu.Unlock()
 	s.clockCancel()
+	s.analysisCancel()
 	// The clock may be waiting for commands; join it outside that lock.
 	s.stop()
+	s.analyses.Wait()
 	err := s.manager.Close()
 	s.commands.Unlock()
 	<-s.clockDone

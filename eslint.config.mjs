@@ -7,6 +7,8 @@ export default tseslint.config(
       '.tools/**',
       'coverage/**',
       'build/**',
+      // MPEG-TS binary fixture data shares the .ts suffix.
+      'testdata/hls/**/*.ts',
     ],
   },
   ...tseslint.configs.recommended,

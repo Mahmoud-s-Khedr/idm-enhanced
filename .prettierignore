@@ -8,3 +8,6 @@ go.sum
 coverage
 build
 extensions/shared/src/contract.ts
+
+# MPEG-TS binary media fixtures, not TypeScript source.
+testdata/hls/**/*.ts

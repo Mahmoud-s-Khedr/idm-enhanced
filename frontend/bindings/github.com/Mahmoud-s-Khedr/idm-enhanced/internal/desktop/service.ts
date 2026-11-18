@@ -8,6 +8,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as manager$0 from "../manager/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as media$0 from "../media/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -15,6 +18,12 @@ import * as $models from "./models.js";
 
 export function Add(r: $models.DownloadRequest): $CancellablePromise<string> {
     return $Call.ByID(2619394847, r);
+}
+
+export function AnalyzeMedia(source: string): $CancellablePromise<media$0.Choice[]> {
+    return $Call.ByID(3266850572, source).then(($result: any) => {
+        return $$createType1($result);
+    });
 }
 
 export function ChooseDestination(): $CancellablePromise<string> {
@@ -27,7 +36,7 @@ export function Control(c: $models.Command): $CancellablePromise<void> {
 
 export function Downloads(): $CancellablePromise<$models.Snapshot> {
     return $Call.ByID(2811249293).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType2($result);
     });
 }
 
@@ -37,7 +46,7 @@ export function Hello(): $CancellablePromise<string> {
 
 export function Info(): $CancellablePromise<$models.Status> {
     return $Call.ByID(1029083128).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -50,5 +59,7 @@ export function SaveSettings(p: manager$0.Settings): $CancellablePromise<void> {
 }
 
 // Private type creation functions
-const $$createType0 = $models.Snapshot.createFrom;
-const $$createType1 = $models.Status.createFrom;
+const $$createType0 = media$0.Choice.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $models.Snapshot.createFrom;
+const $$createType3 = $models.Status.createFrom;

@@ -110,11 +110,11 @@ Pin external actions to immutable revisions, minimize workflow permissions, and 
 
 These project thresholds are enforced when the corresponding logic exists; they are not universal industry rules:
 
-| Area                                                | Threshold when activated                     | Notes                                                                           |
-| --------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| Handwritten Go application packages                 | 80% statements, checked per package          | Active for M0 internal logic; explicit adapter exclusions require rationale     |
-| Critical range/checkpoint/state-transition packages | 90% statements                               | Active in M2 for engine, manager, storage; recovery scenarios remain mandatory  |
-| Handwritten frontend/extension logic                | 80% lines/statements/functions; 75% branches | Activate with each package's first behavior tests; use explicit inclusion globs |
+| Area                                                | Threshold when activated                     | Notes                                                                                 |
+| --------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Handwritten Go application packages                 | 80% statements, checked per package          | Active for M0 internal logic; explicit adapter exclusions require rationale           |
+| Critical range/checkpoint/state-transition packages | 90% statements                               | Active for engine, manager, storage and M7 media; recovery scenarios remain mandatory |
+| Handwritten frontend/extension logic                | 80% lines/statements/functions; 75% branches | Activate with each package's first behavior tests; use explicit inclusion globs       |
 
 Go's ordinary coverage reports statement coverage, not branch coverage. Coverage tooling must aggregate runs consistently and compare the intended package set, rather than hiding weak packages behind a single repository average. Generated code and platform glue may require narrow documented exclusions; do not exclude all error handling, adapters, or tests to improve results.
 

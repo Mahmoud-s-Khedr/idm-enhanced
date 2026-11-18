@@ -30,3 +30,29 @@ test('reads only well formed saved requests', async () => {
   get.mockResolvedValue({ handoff });
   expect(await pending()).toEqual({ ...handoff, accepted: false });
 });
+
+test('saved HLS retries retain mode and unsupported modes are rejected', async () => {
+  const get = vi.fn();
+  vi.stubGlobal('browser', { storage: { local: { get } } });
+  const { pending } = await import('./browser');
+  const request = {
+    version: 1,
+    type: 'download',
+    id: 'media',
+    url: 'https://example.invalid/list',
+    filename: 'list',
+    mode: 'hls',
+  };
+  get.mockResolvedValue({
+    handoff: { request, status: 'retry', accepted: false },
+  });
+  expect((await pending())?.request).toEqual(request);
+  get.mockResolvedValue({
+    handoff: { request: { ...request, mode: 'unknown' }, status: 'retry' },
+  });
+  expect(await pending()).toBeUndefined();
+  get.mockResolvedValue({
+    handoff: { request: { ...request, mode: '' }, status: 'retry' },
+  });
+  expect((await pending())?.request.mode).toBeUndefined();
+});

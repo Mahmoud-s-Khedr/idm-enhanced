@@ -966,3 +966,39 @@ func TestShortValidatedResumeCanResumeAgain(t *testing.T) {
 		t.Fatal(string(data), err)
 	}
 }
+
+func TestVerifiedFileCancellationRetriesPublicationWithoutSource(t *testing.T) {
+	m, source := fixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	j, err := m.Create(ctx, Options{URL: source, Destination: filepath.Join(t.TempDir(), "verified")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.boundary = func(step string) error {
+		if step == "after-verified-commit" {
+			cancel()
+			return ctx.Err()
+		}
+		return nil
+	}
+	if err = m.Run(ctx, j.ID, false, nil); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	m.boundary = nil
+	var calls atomic.Int32
+	m.client = &http.Client{Transport: managerTransport(func(*http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return nil, errors.New("origin unavailable")
+	})}
+	if err = m.Run(context.Background(), j.ID, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 0 {
+		t.Fatal("verified publication attempted network transfer")
+	}
+	data, err := os.ReadFile(j.Destination)
+	if err != nil || string(data) != "hello" {
+		t.Fatal(string(data), err)
+	}
+}

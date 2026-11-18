@@ -51,6 +51,8 @@ export class Command {
 }
 
 export class DownloadRequest {
+    "kind": string;
+    "mediaChoice": string;
     "url": string;
     "destination": string;
     "sha256": string;
@@ -58,6 +60,12 @@ export class DownloadRequest {
 
     /** Creates a new DownloadRequest instance. */
     constructor($$source: Partial<DownloadRequest> = {}) {
+        if (!("kind" in $$source)) {
+            this["kind"] = "";
+        }
+        if (!("mediaChoice" in $$source)) {
+            this["mediaChoice"] = "";
+        }
         if (!("url" in $$source)) {
             this["url"] = "";
         }
@@ -87,6 +95,10 @@ export class DownloadRequest {
  * JobView intentionally excludes source URLs, validators and ownership tokens.
  */
 export class JobView {
+    "kind": string;
+    "mediaObjects": number;
+    "mediaComplete": number;
+    "mediaBytes": number;
     "id": string;
     "name": string;
     "destination": string;
@@ -102,6 +114,18 @@ export class JobView {
 
     /** Creates a new JobView instance. */
     constructor($$source: Partial<JobView> = {}) {
+        if (!("kind" in $$source)) {
+            this["kind"] = "";
+        }
+        if (!("mediaObjects" in $$source)) {
+            this["mediaObjects"] = 0;
+        }
+        if (!("mediaComplete" in $$source)) {
+            this["mediaComplete"] = 0;
+        }
+        if (!("mediaBytes" in $$source)) {
+            this["mediaBytes"] = 0;
+        }
         if (!("id" in $$source)) {
             this["id"] = "";
         }

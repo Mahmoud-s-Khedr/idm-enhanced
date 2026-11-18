@@ -1,16 +1,16 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M5 merged; M6 engineering hardening implemented (protected merge pending); human beta acceptance deferred by the owner
+Status: M0–M6 engineering merged; M7 supported-profile HLS implemented (protected acceptance tracked in PR #9); human beta acceptance deferred by the owner
 
 Date: 2026-11-16
 
-Updated: 2026-11-18 — M6 hardening tracked in docs/M6_EVIDENCE.md; support/recovery matrix in docs/SUPPORT.md
+Updated: 2026-11-18 — M7 media tracked in docs/M7_EVIDENCE.md and ADR 0007; support/recovery matrix in docs/SUPPORT.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 
 Target: Windows, macOS, and Linux desktop
 
-Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI. [M2 evidence](docs/M2_EVIDENCE.md) covers persistence/recovery and [M3 evidence](docs/M3_EVIDENCE.md) covers parallel transfers, queues and shared limits; M4 desktop workflows are implemented with acceptance tracked in [M4 evidence](docs/M4_EVIDENCE.md); M5 browser handoff and alpha installers are tracked in [M5 evidence](docs/M5_EVIDENCE.md); media remains planned.
+Repository standards: [Quality policy](docs/QUALITY_POLICY.md) and [agent instructions](AGENTS.md). M0 now supplies canonical tooling, hooks, a desktop shell and browser ping spike. See [M0 evidence](docs/M0_EVIDENCE.md) and [gate rollout](docs/GATES.md) for acceptance status; [M1 evidence](docs/M1_EVIDENCE.md) records the sequential CLI. [M2 evidence](docs/M2_EVIDENCE.md) covers persistence/recovery and [M3 evidence](docs/M3_EVIDENCE.md) covers parallel transfers, queues and shared limits; M4 desktop workflows are implemented with acceptance tracked in [M4 evidence](docs/M4_EVIDENCE.md); M5 browser handoff and alpha installers are tracked in [M5 evidence](docs/M5_EVIDENCE.md); M7 adds a bounded HLS VOD profile; DASH remains planned.
 
 ## 1. Project direction
 

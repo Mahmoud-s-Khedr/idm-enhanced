@@ -51,17 +51,32 @@ export function JobList({
           </p>
           <progress
             aria-label={`Progress for ${j.name}`}
-            value={j.total >= 0 ? j.bytes : undefined}
-            max={j.total >= 0 ? Math.max(1, j.total) : undefined}
+            value={
+              j.mediaObjects > 0
+                ? j.mediaComplete
+                : j.total >= 0
+                  ? j.bytes
+                  : undefined
+            }
+            max={
+              j.mediaObjects > 0
+                ? j.mediaObjects
+                : j.total >= 0
+                  ? Math.max(1, j.total)
+                  : undefined
+            }
             aria-valuetext={
-              j.total < 0
-                ? `${bytes(j.bytes)} downloaded; size unknown`
-                : `${bytes(j.bytes)} of ${bytes(j.total)}`
+              j.mediaObjects > 0
+                ? `${j.mediaComplete} of ${j.mediaObjects} segments; ${bytes(j.mediaBytes)} downloaded`
+                : j.total < 0
+                  ? `${bytes(j.bytes)} downloaded; size unknown`
+                  : `${bytes(j.bytes)} of ${bytes(j.total)}`
             }
           />
           <p>
-            {bytes(j.bytes)}
-            {j.total >= 0 ? ` of ${bytes(j.total)}` : ' · size unknown'}
+            {j.mediaObjects > 0
+              ? `${j.mediaComplete} of ${j.mediaObjects} segments · ${bytes(j.mediaBytes)} downloaded`
+              : `${bytes(j.bytes)}${j.total >= 0 ? ` of ${bytes(j.total)}` : ' · size unknown'}`}
           </p>
           {j.scheduled && (
             <p>Scheduled: {new Date(j.scheduled).toLocaleString()}</p>

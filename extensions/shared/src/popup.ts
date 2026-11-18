@@ -1,3 +1,4 @@
+import { findMediaCandidates, type MediaCandidate } from './media-candidates';
 import { testConnection } from './connection';
 import { api, pending } from './browser';
 import { downloadRequest, handoff } from './handoff';
@@ -29,7 +30,7 @@ async function show(operation: () => Promise<string>) {
         : 'Desktop connection failed. Open IDM Enhanced and retry.';
   } finally {
     document.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
-      b.disabled = false;
+      b.disabled = b.id === 'use-candidate' && mediaCandidates.length === 0;
     });
   }
 }
@@ -45,7 +46,14 @@ async function submit(reuse: boolean): Promise<string> {
   const request =
     reuse && saved
       ? saved.request
-      : downloadRequest(url?.value ?? '', name?.value ?? '');
+      : downloadRequest(
+          url?.value ?? '',
+          name?.value ?? '',
+          undefined,
+          document.querySelector<HTMLInputElement>('#hls')?.checked
+            ? 'hls'
+            : '',
+        );
   await saveRequest(request);
   try {
     const result = await handoff(send, request);
@@ -77,3 +85,50 @@ void pending()
       status.textContent =
         'Extension storage unavailable. Check browser permissions.';
   });
+
+const discover = document.querySelector<HTMLButtonElement>('#discover');
+const candidates = document.querySelector<HTMLSelectElement>('#candidates');
+const useCandidate =
+  document.querySelector<HTMLButtonElement>('#use-candidate');
+let mediaCandidates: MediaCandidate[] = [];
+discover?.addEventListener('click', () => {
+  void show(async () => {
+    mediaCandidates = [];
+    candidates?.replaceChildren();
+    try {
+      const [tab] = await api.tabs.query({ active: true, currentWindow: true });
+      if (typeof tab?.id !== 'number') throw new Error('No active tab');
+      const results = await api.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: findMediaCandidates,
+      });
+      mediaCandidates = (results[0]?.result ?? []).slice(0, 32);
+      for (const [index, item] of mediaCandidates.entries()) {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = item.label;
+        candidates?.append(option);
+      }
+      return mediaCandidates.length
+        ? 'Choose a candidate, then queue it explicitly. HLS sources must match the supported VOD profile.'
+        : 'No usable HTTP(S) media candidates found. Keep unsupported sources in the browser.';
+    } catch {
+      throw new Error(
+        'Cannot inspect this tab. Use an accessible HTTP(S) page or paste a direct media URL.',
+      );
+    }
+  });
+});
+useCandidate?.addEventListener('click', () => {
+  const item = mediaCandidates[Number(candidates?.value)];
+  if (!item) return;
+  const url = document.querySelector<HTMLInputElement>('#url');
+  const name = document.querySelector<HTMLInputElement>('#filename');
+  const hls = document.querySelector<HTMLInputElement>('#hls');
+  if (url) url.value = item.url;
+  if (name) name.value = '';
+  if (hls) hls.checked = item.mode === 'hls';
+  if (status)
+    status.textContent =
+      'Media URL selected. Review the source and queue explicitly.';
+});

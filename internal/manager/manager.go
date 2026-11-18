@@ -25,17 +25,23 @@ import (
 type Job = storage.Job
 type Options struct {
 	URL, Destination, SHA256 string
+	Kind, MediaChoice        string
 	ScheduledAt              time.Time
 	Progress                 func(int64, int64)
 }
 type Manager struct {
-	store        *storage.Store
-	client       *http.Client
-	boundary     func(string) error
-	mu           sync.Mutex
-	active       map[string]context.CancelFunc
-	config       Config
-	queueRunning bool
+	store         *storage.Store
+	client        *http.Client
+	boundary      func(string) error
+	mu            sync.Mutex
+	active        map[string]context.CancelFunc
+	config        Config
+	queueRunning  bool
+	directory     string
+	assemble      func(context.Context, io.Reader, int64, *os.File) error
+	analysisSlots chan struct{}
+	closed        bool
+	closeErr      error
 }
 
 func Open(dir string, readonly bool, client *http.Client) (*Manager, error) {
@@ -47,7 +53,11 @@ func OpenContext(ctx context.Context, dir string, readonly bool, client *http.Cl
 	if err != nil {
 		return nil, err
 	}
-	m := &Manager{store: s, active: make(map[string]context.CancelFunc)}
+	directory, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, errors.Join(err, s.Close())
+	}
+	m := &Manager{store: s, active: make(map[string]context.CancelFunc), directory: directory, analysisSlots: make(chan struct{}, 2)}
 	if err := m.Configure(DefaultConfig(), client); err != nil {
 		return nil, errors.Join(err, s.Close())
 	}
@@ -61,11 +71,16 @@ func OpenContext(ctx context.Context, dir string, readonly bool, client *http.Cl
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.active) > 0 || m.queueRunning {
+	if m.closed {
+		return m.closeErr
+	}
+	if len(m.active) > 0 || m.queueRunning || len(m.analysisSlots) > 0 {
 		return errors.New("manager is busy")
 	}
 	m.client.CloseIdleConnections()
-	return m.store.Close()
+	m.closed = true
+	m.closeErr = m.store.Close()
+	return m.closeErr
 }
 func (m *Manager) Status(ctx context.Context) ([]Job, error) { return m.store.List(ctx) }
 
@@ -75,6 +90,17 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	return m.create(ctx, o, "", "")
 }
 func (m *Manager) create(ctx context.Context, o Options, requestID, fingerprint string) (Job, error) {
+	if o.Kind != "" && o.Kind != "hls" {
+		return Job{}, errors.New("unsupported download kind")
+	}
+	if o.Kind == "hls" && (len(o.URL) > 16384 || !strings.EqualFold(filepath.Ext(o.Destination), ".mp4") || o.SHA256 != "" || (o.MediaChoice != "" && len(o.MediaChoice) != 64)) {
+		return Job{}, errors.New("HLS requires a new MP4 destination and a valid selection")
+	}
+	if o.MediaChoice != "" {
+		if _, e := hex.DecodeString(o.MediaChoice); e != nil || o.Kind != "hls" {
+			return Job{}, errors.New("invalid media choice")
+		}
+	}
 	jobs, err := m.store.List(ctx)
 	if err != nil {
 		return Job{}, err
@@ -117,7 +143,7 @@ func (m *Manager) create(ctx context.Context, o Options, requestID, fingerprint 
 	if _, err := rand.Read(id); err != nil {
 		return Job{}, err
 	}
-	j := Job{Version: 1, ID: hex.EncodeToString(id), Source: o.URL, Destination: dest, Checksum: o.SHA256, Length: -1, State: "queued", Created: time.Now().UTC(), ScheduledAt: o.ScheduledAt.UTC()}
+	j := Job{Kind: o.Kind, MediaChoice: o.MediaChoice, Version: 1, ID: hex.EncodeToString(id), Source: o.URL, Destination: dest, Checksum: o.SHA256, Length: -1, State: "queued", Created: time.Now().UTC(), ScheduledAt: o.ScheduledAt.UTC()}
 	for _, existing := range jobs {
 		j.QueueOrder = max(j.QueueOrder, existing.QueueOrder+1)
 	}
@@ -148,17 +174,19 @@ func vacant(path string) error {
 }
 
 var transitions = map[string]string{
-	"queued":          " inspecting paused cancelled needs_attention",
+	"queued":          " analyzing inspecting paused cancelled needs_attention",
 	"inspecting":      " downloading paused needs_attention failed cancelled",
-	"downloading":     " pausing verifying paused needs_attention failed cancelled",
+	"downloading":     " assembling pausing verifying paused needs_attention failed cancelled",
 	"pausing":         " paused failed needs_attention",
-	"paused":          " inspecting queued cancelled needs_attention verifying",
+	"analyzing":       " downloading assembling paused failed needs_attention cancelled",
+	"assembling":      " verifying paused failed needs_attention cancelled",
+	"paused":          " analyzing inspecting queued cancelled needs_attention verifying",
 	"needs_attention": " queued cancelled verifying",
 	"verifying":       " completed needs_attention failed paused",
 	"completed":       "",
-	"failed":          " inspecting queued cancelled needs_attention paused retry_wait",
-	"retry_wait":      " inspecting queued paused cancelled needs_attention failed",
-	"cancelled":       " inspecting queued needs_attention verifying",
+	"failed":          " analyzing inspecting queued cancelled needs_attention paused retry_wait",
+	"retry_wait":      " analyzing inspecting queued paused cancelled needs_attention failed",
+	"cancelled":       " analyzing inspecting queued needs_attention verifying",
 }
 
 func (m *Manager) transition(ctx context.Context, j *Job, state string) error {
@@ -174,23 +202,53 @@ func (m *Manager) transition(ctx context.Context, j *Job, state string) error {
 	return nil
 }
 func owned(j Job, flag int) (*os.File, error) {
-	if j.Partial == "" || j.Identity == "" {
+	return openOwnedFile(j.Partial, j.Identity, j.Ownership, flag)
+}
+
+// openOwnedFile is the shared physical ownership boundary for file partials and
+// complete media objects. Their checkpoint and scheduling semantics stay separate.
+func openOwnedFile(path, expectedIdentity, ownership string, flag int) (*os.File, error) {
+	if path == "" || expectedIdentity == "" {
 		return nil, errors.New("partial ownership unavailable; explicit restart required")
 	}
-	info, err := os.Lstat(j.Partial)
+	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, errors.New("owned partial missing or replaced; explicit restart required")
 	}
-	f, err := os.OpenFile(j.Partial, flag, 0)
+	f, err := os.OpenFile(path, flag, 0)
 	if err != nil {
 		return nil, err
 	}
 	identity, err := localfs.Identity(f)
-	ownershipErr := localfs.VerifyOwnership(f, j.Ownership)
-	if err != nil || identity != j.Identity || ownershipErr != nil {
+	ownershipErr := localfs.VerifyOwnership(f, ownership)
+	if err != nil || identity != expectedIdentity || ownershipErr != nil {
 		return nil, errors.Join(errors.New("partial identity changed; explicit restart required"), err, ownershipErr, f.Close())
 	}
 	return f, nil
+}
+
+type allocation struct{ Path, Identity, Ownership string }
+
+func allocateOwnedFile(directory, pattern string) (*os.File, allocation, error) {
+	f, err := os.CreateTemp(directory, pattern)
+	if err != nil {
+		return nil, allocation{}, err
+	}
+	a := allocation{Path: f.Name(), Ownership: rand.Text()}
+	a.Identity, err = localfs.Identity(f)
+	if err == nil {
+		err = localfs.Protect(f.Name(), false)
+	}
+	if err == nil {
+		err = localfs.TagOwnership(f, a.Ownership)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if err == nil {
+		err = localfs.SyncDir(directory)
+	}
+	return f, a, err
 }
 func digest(reader io.Reader) (string, error) {
 	h := sha256.New()
@@ -204,25 +262,11 @@ func (m *Manager) allocate(ctx context.Context, j *Job) (*os.File, error) {
 	if err := vacant(j.Destination); err != nil {
 		return nil, err
 	}
-	f, err := os.CreateTemp(filepath.Dir(j.Destination), "."+filepath.Base(j.Destination)+"-*.part")
-	if err != nil {
+	f, a, err := allocateOwnedFile(filepath.Dir(j.Destination), "."+filepath.Base(j.Destination)+"-*.part")
+	if f == nil {
 		return nil, err
 	}
-	j.Partial = f.Name()
-	j.Ownership = rand.Text()
-	j.Identity, err = localfs.Identity(f)
-	if err == nil {
-		err = localfs.Protect(f.Name(), false)
-	}
-	if err == nil {
-		err = localfs.TagOwnership(f, j.Ownership)
-	}
-	if err == nil {
-		err = f.Sync()
-	}
-	if err == nil {
-		err = localfs.SyncDir(filepath.Dir(j.Partial))
-	}
+	j.Partial, j.Identity, j.Ownership = a.Path, a.Identity, a.Ownership
 	if err == nil {
 		err = m.store.Save(ctx, *j)
 	}
@@ -301,7 +345,7 @@ func (m *Manager) recoverContext(ctx context.Context) error {
 				continue
 			}
 		}
-		if j.State == "inspecting" || j.State == "downloading" || j.State == "pausing" || j.State == "verifying" || j.State == "retry_wait" {
+		if j.State == "inspecting" || j.State == "downloading" || j.State == "pausing" || j.State == "verifying" || j.State == "retry_wait" || j.State == "analyzing" || j.State == "assembling" {
 			if err := m.transition(ctx, &j, "paused"); err != nil {
 				return err
 			}
@@ -366,7 +410,7 @@ func (m *Manager) runAttempt(ctx context.Context, id string, restart bool, progr
 		return nil
 	}
 	j.RetryAt = time.Time{}
-	if !restart && j.Phase == "verified" && j.State == "cancelled" {
+	if !restart && j.Phase == "verified" && (j.State == "cancelled" || j.State == "paused" || j.State == "failed" || j.State == "verifying") {
 		if err := m.transition(ctx, &j, "verifying"); err != nil {
 			return err
 		}
@@ -380,6 +424,9 @@ func (m *Manager) runAttempt(ctx context.Context, id string, restart bool, progr
 	j.RetryCount = attempt
 	if j.State == "needs_attention" || j.Error == "discarded" {
 		return engine.ErrUnsafeResume
+	}
+	if j.Kind == "hls" {
+		return m.runMedia(ctx, &j)
 	}
 	if err := m.transition(ctx, &j, "inspecting"); err != nil {
 		return err
@@ -484,18 +531,26 @@ func (m *Manager) runAttempt(ctx context.Context, id string, restart bool, progr
 	if err = ctx.Err(); err != nil {
 		return m.fail(&j, err, "interrupted", false)
 	}
-	j.Phase = "verified"
-	if err = m.step("before-verified-commit"); err != nil {
+	return m.finishVerified(ctx, &j)
+}
+
+// finishVerified shares the existing verified-record and exclusive publication
+// transaction boundaries across file transfers and assembled media outputs.
+func (m *Manager) finishVerified(ctx context.Context, j *Job) error {
+	next := *j
+	next.Phase = "verified"
+	if err := m.step("before-verified-commit"); err != nil {
 		return err
 	}
-	if err = m.store.Save(ctx, j); err != nil {
+	if err := m.store.Save(ctx, next); err != nil {
 		return err
 	}
-	if err = m.step("after-verified-commit"); err != nil {
+	*j = next
+	if err := m.step("after-verified-commit"); err != nil {
 		return err
 	}
-	if err = m.publish(ctx, &j); err != nil {
-		return m.fail(&j, err, "publication", true)
+	if err := m.publish(ctx, j); err != nil {
+		return m.fail(j, err, "publication", true)
 	}
 	return nil
 }
@@ -610,6 +665,15 @@ func (m *Manager) discard(j *Job) error {
 	return localfs.SyncDir(filepath.Dir(j.Partial))
 }
 func (m *Manager) reset(ctx context.Context, j *Job) error {
+	if j.Kind == "hls" {
+		if err := m.cleanMedia(j, true); err != nil {
+			return err
+		}
+		j.Media = nil
+		j.MediaObjects = 0
+		j.MediaComplete = 0
+		j.MediaBytes = 0
+	}
 	if j.Partial != "" {
 		if _, err := os.Lstat(j.Partial); err == nil {
 			if f, ownershipErr := owned(*j, os.O_RDONLY); ownershipErr == nil {
@@ -654,6 +718,16 @@ func (m *Manager) Cancel(ctx context.Context, id string, keep bool) error {
 	if j.State == "completed" {
 		return nil
 	}
+	if !keep && j.Kind == "hls" {
+		j.Error = "discarded"
+		if err := m.discardMedia(&j); err != nil {
+			return err
+		}
+		j.Media = nil
+		j.MediaObjects = 0
+		j.MediaComplete = 0
+		j.MediaBytes = 0
+	}
 	if !keep && j.Partial != "" {
 		if err := m.discard(&j); err != nil {
 			return err
@@ -670,6 +744,9 @@ func (m *Manager) Cancel(ctx context.Context, id string, keep bool) error {
 	return m.transition(ctx, &j, "cancelled")
 }
 func Resumable(j Job) bool {
+	if j.Kind == "hls" {
+		return j.State != "completed" && j.State != "needs_attention" && j.MediaObjects > 0
+	}
 	return j.State != "completed" && j.State != "needs_attention" && j.Partial != "" && engine.StrongETag(j.ETag)
 }
 
@@ -688,6 +765,18 @@ func RecoveryHint(j Job) string {
 	switch j.Error {
 	case "":
 		return ""
+	case "media_local":
+		return "Media cache ownership or bytes changed. Preserve existing files; Restart abandons unproven cache files and downloads again."
+	case "media_identity":
+		return "The HLS playlist or segment identity changed. Use Restart to discard owned media progress."
+	case "media_unsupported":
+		return "This source is outside the supported unencrypted MPEG-TS HLS VOD profile or its resource limits. Keep unsupported sources in the browser."
+	case "media_dependency":
+		return "Install FFmpeg and ffprobe on PATH, then Resume / retry. Complete segments are retained."
+	case "media_assembly":
+		return "Assembly failed. Check FFmpeg, free disk space and permissions, then Resume / retry. Complete segments are retained and can assemble offline."
+	case "media_transfer":
+		return "Check the connection and source access, then Resume / retry. Complete media objects are verified before reuse."
 	case "remote_identity", "checksum":
 		return "The source changed or could not be verified. Check the source and checksum, then Restart to discard saved progress."
 	case "local_identity", "publication_recovery":

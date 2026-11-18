@@ -10,12 +10,32 @@
       Queue a direct HTTP(S) link in your Downloads folder. Open the desktop to
       run it.
     </p>
+    <button id="discover">Find media in this tab</button>
+    <label
+      >Media candidates
+      <select id="candidates" aria-label="Media candidates"></select
+    ></label>
+    <button id="use-candidate" disabled>Use selected media</button>
+    <p>
+      Only the current main frame is inspected on request. Candidates stay in
+      this popup until you choose and queue one; authenticated and protected
+      sources stay in the browser.
+    </p>
     <form>
       <label
         >Download URL <input id="url" type="url" required size="40" /></label
       ><br />
       <label>Filename (optional) <input id="filename" maxlength="180" /></label
       ><br />
+      <label
+        ><input id="hls" type="checkbox" /> HLS VOD to MP4 (highest
+        bandwidth)</label
+      ><br />
+      <p>
+        HLS requires FFmpeg and ffprobe. For quality selection, use Analyze HLS
+        in the desktop. Live, encrypted, fMP4 and alternate-audio playlists are
+        unsupported.
+      </p>
       <button type="submit">Queue download</button>
     </form>
     <button id="retry">Retry last handoff</button

@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "IDM Enhanced",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Explicitly queue HTTP(S) links in the IDM Enhanced desktop app.",
-  "permissions": ["nativeMessaging", "contextMenus", "storage"],
+  "permissions": [
+    "nativeMessaging",
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
   "action": {
     "default_popup": "popup.html"
   },

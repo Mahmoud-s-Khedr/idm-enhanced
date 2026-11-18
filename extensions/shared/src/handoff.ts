@@ -5,6 +5,7 @@ export function downloadRequest(
   source: string,
   filename: string,
   id: string = crypto.randomUUID(),
+  mode: '' | 'hls' = '',
 ): Message {
   const url = new URL(source);
   if (
@@ -40,6 +41,7 @@ export function downloadRequest(
     type: 'download',
     url: url.href,
     filename: suggested,
+    ...(mode ? { mode } : {}),
   };
 }
 export async function handoff(

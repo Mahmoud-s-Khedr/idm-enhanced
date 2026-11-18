@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/protocol"
 )
@@ -23,7 +24,13 @@ func (m *Manager) AcceptBrowser(ctx context.Context, request protocol.Message, d
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	digest := sha256.Sum256([]byte(request.URL + "\x00" + request.Filename))
+	input := request.URL + "\x00" + request.Filename
+	// Preserve M5 file-receipt fingerprints exactly; bind the additive HLS mode
+	// so the same request ID cannot silently change job semantics.
+	if request.Mode != "" {
+		input += "\x00" + request.Mode
+	}
+	digest := sha256.Sum256([]byte(input))
 	fingerprint := hex.EncodeToString(digest[:])
 	old, jobID, err := m.store.BrowserRequest(ctx, request.ID)
 	if err != nil {
@@ -46,6 +53,13 @@ func (m *Manager) AcceptBrowser(ctx context.Context, request protocol.Message, d
 	}
 	for n := 0; n < 100; n++ {
 		name := request.Filename
+		if request.Mode == "hls" {
+			name = strings.TrimSuffix(name, filepath.Ext(name))
+			if name == "" || len(name) > 176 {
+				name = "media"
+			}
+			name += ".mp4"
+		}
 		if n > 0 {
 			ext := filepath.Ext(name)
 			name = fmt.Sprintf("%s (%d)%s", name[:len(name)-len(ext)], n, ext)
@@ -66,7 +80,7 @@ func (m *Manager) AcceptBrowser(ctx context.Context, request protocol.Message, d
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		j, err := m.create(ctx, Options{URL: request.URL, Destination: dest}, request.ID, fingerprint)
+		j, err := m.create(ctx, Options{Kind: request.Mode, URL: request.URL, Destination: dest}, request.ID, fingerprint)
 		return j.ID, err
 	}
 	return "", errors.New("choose another filename; too many destination collisions")

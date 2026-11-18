@@ -1,6 +1,6 @@
 # Gate rollout
 
-Current milestone: M6 core hardening; M5 PR #7 is merged. Engineering evidence is tracked in M6_EVIDENCE.md; human beta acceptance is deferred. M4 PR #6 is merged. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
+Current milestone: M7 HLS VOD; M6 PR #8 is merged. Evidence is tracked in M7_EVIDENCE.md; human beta acceptance remains deferred. M4 PR #6 is merged. M2 acceptance remains recorded in M2_EVIDENCE.md. `check` runs active offline tasks; `check:full` adds the
 active race, native-host integration and network security checks. Missing tools
 fail. `doctor` diagnoses installations; it is not proof that platform tests passed.
 
@@ -81,3 +81,21 @@ jobs add controlled native version-upgrade and durable queue retention checks.
 Schema 4/checkpoint v1 and all recovery gates stay unchanged. Signing, live
 Windows/macOS browser/UI evidence and owner-deferred beta feedback remain
 release gates; see SUPPORT.md. No mandatory job or threshold is relaxed.
+
+## M7 activation
+
+Media parsing/assembly/object recovery, schema-5 migration/checkpoint privacy and
+lightweight summaries are active. Media joins engine/manager/storage at 90%
+per-package coverage. Both transfer packages have adapter/persistence import
+restrictions. `check:full` additionally runs `task media-smoke`, a nonempty suite
+requiring real FFmpeg/ffprobe and deterministic synthetic playback fixtures.
+Hosted Ubuntu bootstrap supplies tools explicitly; hooks/ordinary checks never
+download them. Native browser smoke admits exactly four file/HLS jobs. Native
+desktop smoke checks explicit HLS selection, MP4 output and temporary-cache cleanup.
+
+The only new formatter/linter ignore is binary MPEG-TS fixture data under
+`testdata/hls/**/*.ts`, which shares TypeScript's suffix; Git also marks it binary.
+No handwritten source is excluded and budgets remain unchanged. Active-tab
+discovery adds user-gesture scripting permissions, without broad host/cookie
+access; live permission/site coverage and Windows/macOS playback remain explicit
+limitations rather than green-check claims.

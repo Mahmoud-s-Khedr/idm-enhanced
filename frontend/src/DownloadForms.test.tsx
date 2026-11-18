@@ -1,5 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { vi, test, expect, afterEach } from 'vitest';
+import { CancellablePromise } from '@wailsio/runtime';
+import { Choice } from '../bindings/github.com/Mahmoud-s-Khedr/idm-enhanced/internal/media/models';
 import { AddDownload } from './AddDownload';
 import { SettingsForm } from './SettingsForm';
 import { Settings } from '../bindings/github.com/Mahmoud-s-Khedr/idm-enhanced/internal/manager/models';
@@ -8,6 +16,7 @@ vi.mock(
   '../bindings/github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop/service',
   () => ({
     Add: vi.fn(),
+    AnalyzeMedia: vi.fn(),
     ChooseDestination: vi.fn(),
     SaveSettings: vi.fn(),
     Control: vi.fn(),
@@ -113,4 +122,94 @@ test('edits bounded settings and keeps an actionable error on save failure', asy
   await screen.findByText(
     'System notifications unavailable. Completion remains in History.',
   );
+});
+
+test('analyzes a bounded HLS source, locks edits while pending and queues the selected variant', async () => {
+  const added = vi.fn();
+  render(<AddDownload added={added} />);
+  fireEvent.click(screen.getByLabelText('HLS VOD media (MP4)'));
+  expect(
+    screen.queryByLabelText('Expected SHA-256 (optional)'),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Analyze HLS' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Add to queue' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Source URL'), {
+    target: { value: 'https://example.com/master.m3u8' },
+  });
+  fireEvent.change(screen.getByLabelText('Save as'), {
+    target: { value: '/tmp/media.mp4' },
+  });
+  let complete: ((choices: Choice[]) => void) | undefined;
+  vi.mocked(Service.AnalyzeMedia).mockImplementation(
+    () =>
+      new CancellablePromise<Choice[]>((resolve) => {
+        complete = resolve;
+      }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Analyze HLS' }));
+  expect(screen.getByLabelText('Source URL')).toBeDisabled();
+  expect(screen.getByLabelText('HLS VOD media (MP4)')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Analyzing…' })).toBeDisabled();
+  const selectedChoice = new Choice({
+    id: 'a'.repeat(64),
+    bandwidth: 1000,
+    resolution: '128x72',
+    codecs: 'avc1.42c01e,mp4a.40.2',
+  });
+  const choices = [
+    selectedChoice,
+    new Choice({ id: 'b'.repeat(64), bandwidth: 2000 }),
+  ];
+  await act(async () => {
+    complete?.(choices);
+  });
+  await screen.findByLabelText('Media quality');
+  fireEvent.change(screen.getByLabelText('Media quality'), {
+    target: { value: selectedChoice.id },
+  });
+  expect(screen.getByLabelText('Source URL')).toBeEnabled();
+  vi.mocked(Service.Add)
+    .mockRejectedValueOnce(new Error('destination collision'))
+    .mockResolvedValue('media-id');
+  fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }));
+  await screen.findByText(/Could not add media/);
+  fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }));
+  await screen.findByText('Download added to the queue.');
+  expect(Service.Add).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      kind: 'hls',
+      mediaChoice: selectedChoice.id,
+      url: 'https://example.com/master.m3u8',
+      destination: '/tmp/media.mp4',
+      sha256: '',
+    }),
+  );
+  expect(added).toHaveBeenCalledOnce();
+  expect(screen.queryByLabelText('Media quality')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('HLS VOD media (MP4)'));
+  expect(
+    screen.getByLabelText('Expected SHA-256 (optional)'),
+  ).toBeInTheDocument();
+});
+
+test('HLS errors retain browser fallback and changing source invalidates previous choices', async () => {
+  render(<AddDownload added={vi.fn()} />);
+  fireEvent.click(screen.getByLabelText('HLS VOD media (MP4)'));
+  fireEvent.change(screen.getByLabelText('Source URL'), {
+    target: { value: 'https://example.com/unsupported' },
+  });
+  vi.mocked(Service.AnalyzeMedia)
+    .mockRejectedValueOnce(new Error('private diagnostic'))
+    .mockResolvedValue([new Choice({ id: '' })]);
+  fireEvent.click(screen.getByRole('button', { name: 'Analyze HLS' }));
+  await screen.findByText(/Could not analyze HLS/);
+  expect(screen.queryByText('private diagnostic')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add to queue' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Analyze HLS' }));
+  await screen.findByLabelText('Media quality');
+  fireEvent.change(screen.getByLabelText('Source URL'), {
+    target: { value: 'https://example.com/new.m3u8' },
+  });
+  expect(screen.queryByLabelText('Media quality')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add to queue' })).toBeDisabled();
 });

@@ -44,7 +44,9 @@ func staged() error {
 		if strings.HasSuffix(p, ".go") {
 			goFiles = append(goFiles, p)
 		}
-		if !strings.HasPrefix(p, "frontend/bindings/") && (strings.HasSuffix(p, ".ts") || strings.HasSuffix(p, ".tsx") || strings.HasSuffix(p, ".mjs") || strings.HasSuffix(p, ".cjs") || strings.HasSuffix(p, ".js")) {
+		// MPEG-TS fixtures share TypeScript's suffix but contain binary media.
+		mediaFixture := strings.HasPrefix(p, "testdata/hls/") && strings.HasSuffix(p, ".ts")
+		if !mediaFixture && !strings.HasPrefix(p, "frontend/bindings/") && (strings.HasSuffix(p, ".ts") || strings.HasSuffix(p, ".tsx") || strings.HasSuffix(p, ".mjs") || strings.HasSuffix(p, ".cjs") || strings.HasSuffix(p, ".js")) {
 			tsFiles = append(tsFiles, p)
 		}
 		formatFiles = append(formatFiles, p)

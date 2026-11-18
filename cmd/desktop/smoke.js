@@ -8,7 +8,9 @@
       if (value) return value;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    throw new Error('Timed out waiting for a desktop control or state');
+    throw new Error(
+      `Timed out waiting for ${String(read)}; status: ${[...document.querySelectorAll('[role="status"]')].map((element) => element.textContent).join('; ')}`,
+    );
   };
   const button = (label, root = document) =>
     [...root.querySelectorAll('button')].find(
@@ -17,7 +19,9 @@
   const fill = (selector, value) => {
     const input = document.querySelector(selector);
     const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
+      input instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype,
       'value',
     ).set;
     setter.call(input, value);
@@ -28,9 +32,17 @@
   try {
     await wait(() => button('Settings'));
     button('Settings').click();
-    await wait(() => document.querySelector('input[type="checkbox"]'));
+    await wait(() =>
+      document.querySelector(
+        'section[aria-labelledby="settings-title"] input[type="checkbox"]',
+      ),
+    );
     // Native delivery is checked separately; no OS permission prompt in smoke.
-    document.querySelector('input[type="checkbox"]').click();
+    document
+      .querySelector(
+        'section[aria-labelledby="settings-title"] input[type="checkbox"]',
+      )
+      .click();
     button('Save settings').click();
     await wait(() => document.body.textContent.includes('Settings saved.'));
     button('All downloads').click();
@@ -74,6 +86,48 @@
     await wait(() => button('Open file'));
     if (!document.body.textContent.includes('8.00 MiB of 8.00 MiB'))
       throw new Error('Incorrect completed progress');
+    button('Remove history').click();
+    await wait(() => !document.querySelector('article'));
+    button('All downloads').click();
+    await wait(() =>
+      document.querySelector(
+        'section[aria-labelledby="add-title"] input[type="checkbox"]',
+      ),
+    );
+    document
+      .querySelector(
+        'section[aria-labelledby="add-title"] input[type="checkbox"]',
+      )
+      .click();
+    await wait(() =>
+      [...document.querySelectorAll('button')].some(
+        (element) => element.textContent === 'Analyze HLS',
+      ),
+    );
+    fill('input[type="url"]', window.__m4Smoke.mediaURL);
+    fill(
+      'input[placeholder="Full path to a new file"]',
+      window.__m4Smoke.mediaDestination,
+    );
+    await wait(() => button('Analyze HLS'));
+    button('Analyze HLS').click();
+    await wait(
+      () => document.querySelector('select') && button('Add to queue'),
+    );
+    const quality = document.querySelector('select').options[1].value;
+    fill('select', quality);
+    document.documentElement.style.fontSize = '200%';
+    if (document.documentElement.scrollWidth > window.innerWidth)
+      throw new Error('HLS quality form overflows at 200%');
+    document.documentElement.style.fontSize = '';
+    button('Add to queue').click();
+    await wait(() => document.querySelector('article'));
+    button('Run queue').click();
+    await wait(() => document.querySelector('.badge.completed'));
+    if (!document.body.textContent.includes('2 of 2 segments'))
+      throw new Error('Incorrect media resource progress');
+    button('History').click();
+    await wait(() => button('Remove history'));
     button('Remove history').click();
     await wait(() => !document.querySelector('article'));
   } catch (error) {

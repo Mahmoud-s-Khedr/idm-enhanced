@@ -32,7 +32,7 @@ func New(ipcStatus string) *Service { return &Service{ipc: ipcStatus} }
 func (s *Service) Info() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return Status{Build: "M5 / Wails 3.0.0", Platform: runtime.GOOS + "/" + runtime.GOARCH, LastPing: s.last, IPC: s.ipc, Notification: s.notification, Lifecycle: s.lifecycle}
+	return Status{Build: "M7 / Wails 3.0.0", Platform: runtime.GOOS + "/" + runtime.GOARCH, LastPing: s.last, IPC: s.ipc, Notification: s.notification, Lifecycle: s.lifecycle}
 }
 func (s *Service) Hello() string { return "Connected to the Go desktop service." }
 

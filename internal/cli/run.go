@@ -36,7 +36,7 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 	command := "download"
 	if len(args) > 0 {
 		switch args[0] {
-		case "resume", "restart", "status", "cancel", "enqueue", "run-queue", "reorder":
+		case "resume", "restart", "status", "cancel", "enqueue", "run-queue", "reorder", "media-info":
 			command = args[0]
 			args = args[1:]
 		}
@@ -55,9 +55,11 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 	perHost := flags.Int("per-host", config.PerHost, "simultaneous requests per host")
 	rate := flags.Int64("rate", 0, "global body bytes per second (0 unlimited)")
 	retries := flags.Int("retries", config.Retries, "automatic retry count (0-8)")
+	hls := flags.Bool("hls", false, "download supported HLS VOD to a new MP4")
+	quality := flags.String("quality", "", "HLS variant ID from media-info (default highest bandwidth)")
 	quiet := flags.Bool("quiet", false, "hide progress")
 	usage := func() {
-		_, _ = fmt.Fprintln(stderr, "Usage: downloader [--state-dir DIR] -o FILE [-sha256 HEX] [-timeout 30m] [-quiet] URL; enqueue [flags] URL; resume|restart|status|cancel [flags] JOB_ID; run-queue [flags]; reorder JOB_ID...")
+		_, _ = fmt.Fprintln(stderr, "Usage: downloader [--state-dir DIR] -o FILE [-sha256 HEX] [-timeout 30m] [-quiet] URL; enqueue [flags] URL; resume|restart|status|cancel [flags] JOB_ID; run-queue [flags]; reorder JOB_ID...; media-info URL; download/enqueue accept -hls [-quality ID]")
 	}
 	if err := flags.Parse(args); err != nil {
 		usage()
@@ -66,7 +68,7 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		}
 		return 2
 	}
-	if *timeout <= 0 || ((command == "download" || command == "enqueue") && (flags.NArg() != 1 || *destination == "")) || ((command == "resume" || command == "restart" || command == "cancel") && flags.NArg() != 1) || (command == "status" && flags.NArg() > 1) || (command == "run-queue" && flags.NArg() != 0) || (command == "cancel" && *keep == *discard) {
+	if ((*hls || *quality != "") && command != "download" && command != "enqueue") || (command == "media-info" && flags.NArg() != 1) || *timeout <= 0 || ((command == "download" || command == "enqueue") && (flags.NArg() != 1 || *destination == "")) || ((command == "resume" || command == "restart" || command == "cancel") && flags.NArg() != 1) || (command == "status" && flags.NArg() > 1) || (command == "run-queue" && flags.NArg() != 0) || (command == "cancel" && *keep == *discard) {
 		usage()
 		return 2
 	}
@@ -110,6 +112,14 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		return reportError(stderr, err)
 	}
 	switch command {
+	case "media-info":
+		choices, e := m.AnalyzeMedia(ctx, flags.Arg(0))
+		err = e
+		if err == nil {
+			for _, choice := range choices {
+				_, _ = fmt.Fprintf(stderr, "choice=%s bandwidth=%d resolution=%q codecs=%q\n", choice.ID, choice.Bandwidth, choice.Resolution, choice.Codecs)
+			}
+		}
 	case "run-queue":
 		err = m.RunQueue(ctx)
 	case "reorder":
@@ -122,6 +132,10 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 			if flags.NArg() == 0 || j.ID == flags.Arg(0) {
 				found = true
 				_, _ = fmt.Fprintf(stderr, "%s state=%s durable=%d destination=%q resumable=%t error=%s order=%d retries=%d retry_at=%s\n", j.ID, j.State, j.Durable, j.Destination, manager.Resumable(j), manager.SafeError(j), j.QueueOrder, j.RetryCount, j.RetryAt.Format(time.RFC3339))
+				if j.Kind == "hls" {
+					p := manager.MediaProgress(j)
+					_, _ = fmt.Fprintf(stderr, "media objects=%d/%d bytes=%d\n", p.Complete, p.Objects, p.Bytes)
+				}
 			}
 		}
 		if err == nil && !found {
@@ -133,7 +147,11 @@ func Run(ctx context.Context, args []string, stderr io.Writer) (code int) {
 		err = m.Run(ctx, flags.Arg(0), command == "restart", progress)
 	default:
 		var j manager.Job
-		j, err = m.Create(ctx, manager.Options{URL: flags.Arg(0), Destination: *destination, SHA256: *checksum})
+		kind := ""
+		if *hls {
+			kind = "hls"
+		}
+		j, err = m.Create(ctx, manager.Options{Kind: kind, MediaChoice: *quality, URL: flags.Arg(0), Destination: *destination, SHA256: *checksum})
 		if err == nil {
 			_, _ = fmt.Fprintln(stderr, "Job:", j.ID)
 			if command != "enqueue" {
