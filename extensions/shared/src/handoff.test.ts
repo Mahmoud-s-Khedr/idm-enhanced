@@ -54,3 +54,20 @@ test('requires matching durable job acknowledgement', async () => {
   ])
     expect(() => decode(value)).toThrow();
 });
+
+test('HLS mode is explicit while filename policy stays in the manager', () => {
+  const request = downloadRequest(
+    'https://example.invalid/master.m3u8#play',
+    '',
+    'media-id',
+    'hls',
+  );
+  expect(request).toEqual({
+    version: 1,
+    id: 'media-id',
+    type: 'download',
+    url: 'https://example.invalid/master.m3u8',
+    filename: 'master.m3u8',
+    mode: 'hls',
+  });
+});

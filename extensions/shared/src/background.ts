@@ -8,12 +8,27 @@ api.runtime.onInstalled.addListener(() => {
     contexts: ['link'],
     targetUrlPatterns: ['http://*/*', 'https://*/*'],
   });
+  api.contextMenus.create({
+    id: 'download-hls',
+    title: 'Queue HLS VOD with IDM Enhanced (highest quality)',
+    contexts: ['link'],
+    targetUrlPatterns: ['http://*/*', 'https://*/*'],
+  });
 });
 api.contextMenus.onClicked.addListener((info) => {
   const source = info.linkUrl;
-  if (info.menuItemId !== 'download' || !source) return;
+  if (
+    !['download', 'download-hls'].includes(String(info.menuItemId)) ||
+    !source
+  )
+    return;
   void (async () => {
-    const request = downloadRequest(source, '');
+    const request = downloadRequest(
+      source,
+      '',
+      undefined,
+      info.menuItemId === 'download-hls' ? 'hls' : '',
+    );
     await saveRequest(request);
     try {
       const status = await handoff(

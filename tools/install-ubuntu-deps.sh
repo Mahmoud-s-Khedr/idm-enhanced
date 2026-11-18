@@ -9,4 +9,4 @@ for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources /etc/
   fi
 done
 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libgtk-4-dev libwebkitgtk-6.0-dev
+apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libgtk-4-dev libwebkitgtk-6.0-dev ffmpeg

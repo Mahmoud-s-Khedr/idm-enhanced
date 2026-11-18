@@ -247,3 +247,56 @@ func TestBrowserDownloadAcceptance(t *testing.T) {
 		t.Fatal(r, err)
 	}
 }
+
+func TestDesktopHLSAnalysisAndFailureSnapshotsRemainRedacted(t *testing.T) {
+	s := desktopFixture(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/index.m3u8" {
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:1,\nsegment.ts?token=private\n#EXT-X-ENDLIST\n"))
+			return
+		}
+		w.WriteHeader(503)
+	}))
+	defer server.Close()
+	choices, err := s.AnalyzeMedia(server.URL + "/index.m3u8?token=private")
+	if err != nil || len(choices) != 1 {
+		t.Fatal(choices, err)
+	}
+	data, err := json.Marshal(choices)
+	if err != nil || strings.Contains(string(data), "private") {
+		t.Fatal("analysis exposed URL", err)
+	}
+	snapshot, err := s.Downloads()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := snapshot.Settings
+	settings.Retries = 0
+	if err = s.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Add(DownloadRequest{Kind: "hls", URL: server.URL + "/index.m3u8?token=private", Destination: filepath.Join(t.TempDir(), "video.mp4")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Control(Command{Action: "run-queue"}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot = desktopWait(t, s)
+	if len(snapshot.Jobs) != 1 || snapshot.Jobs[0].Kind != "hls" || snapshot.Jobs[0].MediaObjects != 1 || snapshot.Jobs[0].MediaComplete != 0 || snapshot.Jobs[0].Guidance == "" {
+		t.Fatal(snapshot)
+	}
+	data, err = json.Marshal(snapshot)
+	if err != nil || strings.Contains(string(data), "private") || strings.Contains(string(data), "segment.ts") {
+		t.Fatal("media snapshot exposed checkpoint", err)
+	}
+	if _, err = s.AnalyzeMedia(strings.Repeat("x", 16385)); err == nil {
+		t.Fatal("oversized source accepted")
+	}
+	if _, err = New("").AnalyzeMedia(server.URL); err == nil {
+		t.Fatal("missing session accepted")
+	}
+	if _, err = s.Add(DownloadRequest{MediaChoice: strings.Repeat("x", 65)}); err == nil {
+		t.Fatal("oversized choice accepted")
+	}
+}

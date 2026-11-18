@@ -10,4 +10,5 @@ export interface Message {
   url?: string;
   filename?: string;
   jobId?: string;
+  mode?: string;
 }

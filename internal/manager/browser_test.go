@@ -170,3 +170,47 @@ func TestBrowserPortableDestinationReservation(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowserHLSAdmissionKeepsFileReceiptCompatibilityAndModeIdentity(t *testing.T) {
+	ctx := context.Background()
+	m, err := Open(t.TempDir(), false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = m.Close() }()
+	directory := t.TempDir()
+	request := protocol.Message{Version: 1, ID: "hls-request", Type: "download", URL: "https://example.invalid/master.m3u8", Filename: "movie.m3u8", Mode: "hls"}
+	first, err := m.AcceptBrowser(ctx, request, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := m.AcceptBrowser(ctx, request, directory)
+	if err != nil || again != first {
+		t.Fatal("media retry duplicated", again, err)
+	}
+	jobs, err := m.Status(ctx)
+	if err != nil || len(jobs) != 1 || jobs[0].Kind != "hls" || filepath.Base(jobs[0].Destination) != "movie.mp4" {
+		t.Fatal(jobs, err)
+	}
+	request.Mode = ""
+	if _, err = m.AcceptBrowser(ctx, request, directory); err == nil {
+		t.Fatal("same ID switched from media to file")
+	}
+	request.Mode = "hls"
+	request.ID = "collision"
+	id, err := m.AcceptBrowser(ctx, request, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := m.store.Get(ctx, id)
+	if err != nil || filepath.Base(j.Destination) != "movie (1).mp4" {
+		t.Fatal(j.Destination, err)
+	}
+	for index, name := range []string{".m3u8", strings.Repeat("x", 180)} {
+		request.ID = fmt.Sprintf("fallback-%d", index)
+		request.Filename = name
+		if _, err = m.AcceptBrowser(ctx, request, directory); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

@@ -25,7 +25,7 @@ func DefaultConfig() Config {
 func (m *Manager) Configure(c Config, client *http.Client) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.active) > 0 || m.queueRunning {
+	if m.closed || len(m.active) > 0 || m.queueRunning || len(m.analysisSlots) > 0 {
 		return errors.New("manager is busy")
 	}
 	if c.Workers < 1 || c.Workers > 16 || c.Jobs < 1 || c.Jobs > 16 || c.PerHost < 1 || c.PerHost > 64 || c.QueueLimit < 1 || c.QueueLimit > 10000 || c.Retries < 0 || c.Retries > 8 || c.BytesPerSecond < 0 || c.BytesPerSecond > 1<<40 || c.Backoff <= 0 || c.Backoff > time.Minute {
@@ -276,6 +276,11 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 	}
 	if (j.State != "completed" && j.State != "cancelled") || (j.State != "completed" && j.Partial != "") {
 		return errors.New("cancel and discard partial data before removing unfinished history")
+	}
+	if j.Kind == "hls" {
+		if err := m.discardMedia(&j); err != nil {
+			return err
+		}
 	}
 	return m.store.Delete(ctx, id)
 }

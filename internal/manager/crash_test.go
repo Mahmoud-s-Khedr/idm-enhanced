@@ -25,6 +25,9 @@ func TestCrashWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if os.Getenv("IDM_TEST_MEDIA") == "1" {
+		m.assemble = fakeMediaAssembly
+	}
 	step := os.Getenv("IDM_TEST_STEP")
 	if step != "" {
 		m.boundary = func(name string) error {

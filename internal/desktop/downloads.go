@@ -1,7 +1,9 @@
 package desktop
 
 import (
+	"context"
 	"errors"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/media"
 	"net/url"
 	"path/filepath"
 	"sort"
@@ -12,18 +14,22 @@ import (
 
 // JobView intentionally excludes source URLs, validators and ownership tokens.
 type JobView struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Destination string `json:"destination"`
-	Host        string `json:"host"`
-	State       string `json:"state"`
-	Error       string `json:"error"`
-	Guidance    string `json:"guidance"`
-	Bytes       int64  `json:"bytes"`
-	Total       int64  `json:"total"`
-	Order       int64  `json:"order"`
-	Scheduled   string `json:"scheduled"`
-	RetryAt     string `json:"retryAt"`
+	Kind          string `json:"kind"`
+	MediaObjects  int    `json:"mediaObjects"`
+	MediaComplete int    `json:"mediaComplete"`
+	MediaBytes    int64  `json:"mediaBytes"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Destination   string `json:"destination"`
+	Host          string `json:"host"`
+	State         string `json:"state"`
+	Error         string `json:"error"`
+	Guidance      string `json:"guidance"`
+	Bytes         int64  `json:"bytes"`
+	Total         int64  `json:"total"`
+	Order         int64  `json:"order"`
+	Scheduled     string `json:"scheduled"`
+	RetryAt       string `json:"retryAt"`
 }
 type Snapshot struct {
 	Jobs     []JobView        `json:"jobs"`
@@ -33,6 +39,8 @@ type Snapshot struct {
 	Settings manager.Settings `json:"settings"`
 }
 type DownloadRequest struct {
+	Kind        string `json:"kind"`
+	MediaChoice string `json:"mediaChoice"`
 	URL         string `json:"url"`
 	Destination string `json:"destination"`
 	SHA256      string `json:"sha256"`
@@ -76,11 +84,12 @@ func (s *Service) Downloads() (Snapshot, error) {
 	out := Snapshot{Jobs: make([]JobView, 0, len(jobs)), Settings: s.session.Settings()}
 	out.Running, out.Sleeping, out.Message = s.session.State()
 	for _, j := range jobs {
+		mediaProgress := manager.MediaProgress(j)
 		host := ""
 		if u, e := url.Parse(j.Source); e == nil {
 			host = u.Hostname()
 		}
-		out.Jobs = append(out.Jobs, JobView{ID: j.ID, Name: filepath.Base(j.Destination), Destination: j.Destination, Host: host, State: j.State, Error: manager.SafeError(j), Guidance: manager.RecoveryHint(j), Bytes: j.Durable, Total: j.Length, Order: j.QueueOrder, Scheduled: instant(j.ScheduledAt), RetryAt: instant(j.RetryAt)})
+		out.Jobs = append(out.Jobs, JobView{Kind: j.Kind, MediaObjects: mediaProgress.Objects, MediaComplete: mediaProgress.Complete, MediaBytes: mediaProgress.Bytes, ID: j.ID, Name: filepath.Base(j.Destination), Destination: j.Destination, Host: host, State: j.State, Error: manager.SafeError(j), Guidance: manager.RecoveryHint(j), Bytes: j.Durable, Total: j.Length, Order: j.QueueOrder, Scheduled: instant(j.ScheduledAt), RetryAt: instant(j.RetryAt)})
 	}
 	return out, nil
 }
@@ -104,14 +113,14 @@ func (s *Service) Add(r DownloadRequest) (string, error) {
 	if s.session == nil {
 		return "", errors.New("downloads unavailable")
 	}
-	if len(r.URL) > 16384 || len(r.Destination) > 4096 || len(r.SHA256) > 64 {
+	if len(r.MediaChoice) > 64 || len(r.Kind) > 16 || len(r.URL) > 16384 || len(r.Destination) > 4096 || len(r.SHA256) > 64 {
 		return "", errors.New("download input is too long")
 	}
 	at, err := parseInstant(r.Scheduled)
 	if err != nil {
 		return "", err
 	}
-	j, err := s.session.Create(manager.Options{URL: r.URL, Destination: r.Destination, SHA256: r.SHA256, ScheduledAt: at})
+	j, err := s.session.Create(manager.Options{Kind: r.Kind, MediaChoice: r.MediaChoice, URL: r.URL, Destination: r.Destination, SHA256: r.SHA256, ScheduledAt: at})
 	return j.ID, err
 }
 func (s *Service) Control(c Command) error {
@@ -181,4 +190,16 @@ func (s *Service) Quit() {
 	if s.actions.Quit != nil {
 		s.actions.Quit()
 	}
+}
+
+func (s *Service) AnalyzeMedia(source string) ([]media.Choice, error) {
+	if s.session == nil {
+		return nil, errors.New("downloads unavailable")
+	}
+	if len(source) > 16384 {
+		return nil, errors.New("source URL is too long")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return s.session.AnalyzeMedia(ctx, source)
 }

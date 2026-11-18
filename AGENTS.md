@@ -13,10 +13,13 @@ M2 PR #3, M3 PR #5 and M4 PR #6 are merged. Read
 `docs/M5_EVIDENCE.md` and `docs/decisions/0006-m5-browser-distribution.md`.
 The user explicitly moved Debian/Fedora/Windows installers and Firefox/Chrome
 extension artifacts into M5. Require protected M5 merge before M6. Preserve
-the M2/M3 recovery invariants. M6 engineering hardening is tracked in
+the M2/M3 recovery invariants. M6 engineering hardening is merged as PR #8 and tracked in
 `docs/M6_EVIDENCE.md`; `docs/SUPPORT.md` records release limitations. The owner
 will send builds to beta users later: do not invent human acceptance or mark
-the public R1 checklist complete from automated checks.
+the public R1 checklist complete from automated checks. M7 HLS implementation is
+tracked in `docs/M7_EVIDENCE.md` and `docs/decisions/0007-m7-hls-vod.md`. Preserve
+file checkpoint v1 and distinct media-object semantics; full checks require real
+FFmpeg/ffprobe. M6 protected merge is verified before M7.
 
 ## Before changing code
 

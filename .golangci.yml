@@ -21,6 +21,7 @@ linters:
         engine:
           files:
             - '${base-path}/internal/engine/**'
+            - '${base-path}/internal/media/**'
           deny:
             - pkg: github.com/Mahmoud-s-Khedr/idm-enhanced/internal/storage
               desc: Engine cannot depend on persistence

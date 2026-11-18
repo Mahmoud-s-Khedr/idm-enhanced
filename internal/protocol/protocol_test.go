@@ -103,3 +103,20 @@ func TestAcknowledgements(t *testing.T) {
 		}
 	}
 }
+
+func TestHLSModeIsBoundedAndOnlyValidOnDownloadRequests(t *testing.T) {
+	request := Message{Version: 1, ID: "media", Type: "download", URL: "https://example.invalid/list.m3u8?token=private", Filename: "list.m3u8", Mode: "hls"}
+	var frame bytes.Buffer
+	if err := Write(&frame, request); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Read(&frame)
+	if err != nil || got != request {
+		t.Fatal(got, err)
+	}
+	for _, value := range []Message{{Version: 1, ID: "media", Type: "ping", Mode: "hls"}, {Version: 1, ID: "media", Type: "accepted", JobID: "job", Mode: "hls"}, {Version: 1, ID: "media", Type: "download", URL: request.URL, Filename: request.Filename, Mode: "unknown"}} {
+		if err := value.Validate(); err == nil {
+			t.Fatal("unexpected media mode accepted")
+		}
+	}
+}

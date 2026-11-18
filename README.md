@@ -5,7 +5,7 @@ gates and browser ping. M2 adds durable CLI downloads and safe resume. M3 adds
 parallel ranges, queues, shared limits and bounded retries; acceptance is tracked in
 [M3 evidence](docs/M3_EVIDENCE.md). M4 adds desktop download management, history, persisted settings,
 one-time schedules and native lifecycle controls; see [M4 evidence](docs/M4_EVIDENCE.md).
-M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). M6 hardening adds accessible cancellation/progress, recovery guidance and upgrade checks; see [M6 evidence](docs/M6_EVIDENCE.md) and the [support/update guide](docs/SUPPORT.md). Human beta feedback remains pending. Media remains later work. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
+M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). M6 hardening adds accessible cancellation/progress, recovery guidance and upgrade checks; see [M6 evidence](docs/M6_EVIDENCE.md) and the [support/update guide](docs/SUPPORT.md). Human beta feedback remains pending. M7 adds a bounded HLS VOD profile; see [M7 evidence](docs/M7_EVIDENCE.md). DASH remains later work. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -150,8 +150,8 @@ CI's **Quality** workflow uploads 30-day artifacts for every PR and main build:
 Each includes Firefox unsigned `.xpi`, Chrome `.zip` and `SHA256SUMS`. Download
 from the successful Actions run's Artifacts section and verify checksums. These
 are unsigned alpha packages, without store publication or signing. Install Linux
-with `sudo apt install ./idm-enhanced_0.6.0_amd64.deb` or
-`sudo dnf install ./idm-enhanced-0.6.0-1.x86_64.rpm`; launch IDM Enhanced from the
+with `sudo apt install ./idm-enhanced_0.7.0_amd64.deb` or
+`sudo dnf install ./idm-enhanced-0.7.0-1.x86_64.rpm`; launch IDM Enhanced from the
 application menu. Windows setup installs for the current user without elevation.
 
 Open the desktop once to register its sibling native host. For Firefox, temporarily
@@ -226,3 +226,39 @@ are not claimed verified merely because the server registered successfully.
 This is development workstation tooling, not an application dependency or required
 CI gate. Its binaries were installed at the exact npm version and checked against
 upstream SHA-256 release files. Source/license: [computer-use-linux (MIT)](https://github.com/agent-sh/computer-use-linux).
+
+## HLS VOD media (M7)
+
+Install FFmpeg and ffprobe separately (Ubuntu: `sudo apt-get install ffmpeg`).
+They are not bundled; ordinary file downloads work without them. On the desktop,
+select **HLS VOD media (MP4)**, enter a playlist URL and new `.mp4` destination,
+choose **Analyze HLS**, select quality and add/run the queue. Empty selection
+uses highest declared bandwidth. Progress counts complete segments separately
+from output bytes. Complete objects remain for offline assembly retry until
+history removal; the completed MP4 is kept.
+
+```sh
+./build/downloader media-info https://example.com/master.m3u8
+./build/downloader -hls -quality VARIANT_ID -o /path/to/new.mp4 https://example.com/master.m3u8
+./build/downloader enqueue -hls -o /path/to/new.mp4 https://example.com/master.m3u8
+go run ./tools/quality task media-smoke
+```
+
+Omit `-quality` for the highest bandwidth or a direct media playlist; copy a
+variant ID exactly from media-info to select it. Standard resume/restart/cancel
+commands keep manager ownership. FFmpeg installation or assembly failure retains
+complete objects: **Resume / retry** can assemble without the original server.
+
+In the extension use **Find media in this tab**, choose a candidate, then queue
+it explicitly, or choose HLS mode for a pasted URL/link context menu. Discovery
+uses temporary activeTab/scripting access to the main frame and recent resource
+URLs; it does not read cookies or intercept transfers. Candidate detection does
+not prove source support. Browser HLS uses highest declared bandwidth and the
+manager chooses an MP4 name; use desktop analysis for explicit quality.
+
+The initial profile requires HLS versions 1–3, explicit VOD plus ENDLIST and
+MPEG-TS objects with H.264/AAC. Live/event/untyped, encrypted/DRM, fMP4 input,
+byte-range, discontinuity and alternate-audio playlists are rejected. Keep
+unsupported or session-authenticated sources in the browser. See the exact
+[support and recovery matrix](docs/SUPPORT.md). Full checks require the real media
+tools; ordinary checks do not install them or silently substitute fake playback.

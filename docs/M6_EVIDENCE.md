@@ -122,3 +122,13 @@ explicitly deferred by the owner, and Windows/macOS interactive coverage,
 screen-reader tests, physical power delivery and public signing/naming are not
 invented. R1 feature follow-ups (speed/ETA, batch import/categories) remain open.
 M7 media work is not part of this hardening change.
+
+## Protected engineering acceptance
+
+PR #8 merged as 0acec4abf9e8fee1b427c427ecffa261bcac4e9b after final head
+2d7fb98a1175ab363a4d8130705746e122f2de2e passed run 44342722093, including
+the corrected nonempty installed-CLI status comparisons on Debian/Fedora/Windows.
+All required quality, native, packaging and aggregate jobs passed. Both review
+threads were resolved. All final-head installer/extension checksums were verified.
+The owner then authorized M7 work while deferring beta-user testing; this is
+engineering acceptance, not public R1 release acceptance.

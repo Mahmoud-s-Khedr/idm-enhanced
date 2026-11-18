@@ -190,3 +190,30 @@ func TestQueueCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestCLIHLSAnalysisQueueAndStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:1,\nobject.ts?token=private\n#EXT-X-ENDLIST\n")
+	}))
+	defer server.Close()
+	state := t.TempDir()
+	var out bytes.Buffer
+	run := func(args ...string) int {
+		out.Reset()
+		return Run(context.Background(), append([]string{"--state-dir", state}, args...), &out)
+	}
+	if code := run("media-info", server.URL); code != 0 || !strings.Contains(out.String(), "choice=") || strings.Contains(out.String(), "private") {
+		t.Fatal(code, out.String())
+	}
+	if code := run("enqueue", "-hls", "-o", filepath.Join(t.TempDir(), "video.mp4"), server.URL); code != 0 {
+		t.Fatal(code, out.String())
+	}
+	if code := run("status"); code != 0 || !strings.Contains(out.String(), "media objects=0/0") {
+		t.Fatal(code, out.String())
+	}
+	for _, args := range [][]string{{"media-info"}, {"status", "-hls"}, {"enqueue", "-hls", "-o", filepath.Join(t.TempDir(), "bad.ts"), server.URL}, {"media-info", "https://name:private@example.invalid/file"}} {
+		if code := run(args...); code == 0 || strings.Contains(out.String(), "private") {
+			t.Fatal(code, out.String())
+		}
+	}
+}

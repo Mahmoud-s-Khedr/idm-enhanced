@@ -111,3 +111,32 @@ test('empty lists explain how to proceed and active runs disable destructive act
   );
   expect(screen.getByText('Cancel…')).toBeDisabled();
 });
+
+test('media progress counts complete objects independently from assembled file bytes', () => {
+  const jobs = [
+    new JobView({
+      id: 'media',
+      name: 'video.mp4',
+      kind: 'hls',
+      state: 'assembling',
+      total: -1,
+      mediaObjects: 2,
+      mediaComplete: 1,
+      mediaBytes: 8192,
+      guidance: 'Complete segments are retained for assembly.',
+    }),
+  ];
+  render(
+    <JobList jobs={jobs} allJobs={jobs} running={true} control={vi.fn()} />,
+  );
+  expect(screen.getByRole('progressbar')).toHaveAttribute('value', '1');
+  expect(screen.getByRole('progressbar')).toHaveAttribute('max', '2');
+  expect(screen.getByRole('progressbar')).toHaveAttribute(
+    'aria-valuetext',
+    '1 of 2 segments; 0.01 MiB downloaded',
+  );
+  expect(
+    screen.getByText('1 of 2 segments · 0.01 MiB downloaded'),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/size unknown/)).not.toBeInTheDocument();
+});

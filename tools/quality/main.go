@@ -62,7 +62,7 @@ func main() {
 	case "check", "check:full":
 		names := []string{"versions", "build", "format", "lint-go", "lint-ts", "types", "deadcode", "architecture", "clones", "test-clones", "mod-drift", "test-go", "test-tools", "test-ts", "bindings", "budgets"}
 		if args[0] == "check:full" {
-			names = append(names, "race", "integration", "secrets", "vuln")
+			names = append(names, "race", "integration", "media-smoke", "secrets", "vuln")
 		}
 		err = sequence(names)
 	case "task":
@@ -204,6 +204,15 @@ func task(n string) error {
 		return goTest("-race", "-count=1", "./internal/...", "./tools/...")
 	case "integration":
 		return goTest("-count=1", "-tags=integration", "./integration/...")
+	case "media-smoke":
+		for _, tool := range []string{"ffmpeg", "ffprobe"} {
+			b, e := output(tool, "-version")
+			if e != nil {
+				return e
+			}
+			fmt.Println(strings.SplitN(string(b), "\n", 2)[0])
+		}
+		return goTest("-count=1", "-tags=media", "./integration/media")
 	case "bindings":
 		if err := command("go", "run", "./tools/contract", "-check"); err != nil {
 			return err
@@ -380,6 +389,10 @@ func doctor() error {
 	} else {
 		fmt.Println("Native messaging registration and local IPC available; run browser smoke on a supported browser installation.")
 	}
+	for _, tool := range []string{"ffmpeg", "ffprobe"} {
+		p, e := exec.LookPath(tool)
+		fmt.Printf("Media runtime %s (required for media-smoke): %s (%v)\n", tool, p, e)
+	}
 	return errors.Join(versionErr, nativeErr)
 }
 func bootstrap() error {
@@ -487,7 +500,7 @@ func coverage() error {
 		pct := 100 * float64(c.covered) / float64(c.total)
 		fmt.Printf("%s %.1f%%\n", p, pct)
 		minimum := 80
-		for _, critical := range []string{"/internal/engine", "/internal/manager", "/internal/storage"} {
+		for _, critical := range []string{"/internal/engine", "/internal/manager", "/internal/storage", "/internal/media"} {
 			if strings.HasSuffix(p, critical) {
 				minimum = 90
 			}

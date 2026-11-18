@@ -29,6 +29,7 @@ type Message struct {
 	URL      string `json:"url,omitempty"`
 	Filename string `json:"filename,omitempty"`
 	JobID    string `json:"jobId,omitempty"`
+	Mode     string `json:"mode,omitempty"`
 }
 
 func (m Message) Validate() error {
@@ -38,7 +39,7 @@ func (m Message) Validate() error {
 	if !requestID.MatchString(m.ID) {
 		return errors.New("invalid request ID")
 	}
-	if m.Type != "download" && (m.URL != "" || m.Filename != "") {
+	if m.Type != "download" && (m.URL != "" || m.Filename != "" || m.Mode != "") {
 		return errors.New("unexpected download fields")
 	}
 	if m.Type != "accepted" && m.JobID != "" {
@@ -46,6 +47,9 @@ func (m Message) Validate() error {
 	}
 	switch m.Type {
 	case "download":
+		if m.Mode != "" && m.Mode != "hls" {
+			return errors.New("unsupported download mode")
+		}
 		if m.Error != "" {
 			return errors.New("unexpected error field")
 		}

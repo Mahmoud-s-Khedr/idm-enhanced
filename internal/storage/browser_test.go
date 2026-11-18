@@ -12,7 +12,7 @@ func TestBrowserAtomicReceipts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.db.Exec("DROP TABLE browser_requests; PRAGMA user_version=3"); err != nil {
+	if _, err = s.db.Exec("DROP TABLE browser_requests;" + releasedJobs(2) + "PRAGMA user_version=3;"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {

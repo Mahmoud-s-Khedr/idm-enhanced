@@ -1,6 +1,6 @@
 # Core testing support matrix and recovery guide
 
-Updated: 2026-11-18. Version 0.6.0 is an unsigned internal testing candidate.
+Updated: 2026-11-18. Version 0.7.0 is an unsigned internal testing candidate.
 It is not a public R1 release. Beta-user acceptance is pending; the owner will
 send the candidate to testers later. No automatic update channel is provided.
 
@@ -24,9 +24,33 @@ Supported sources are direct HTTP(S) GET URLs, including directly usable MP4/Web
 file URLs. Strong ETags and validated byte ranges are required for safe resume;
 initial downloads without them can stream sequentially. Credentials embedded in
 URLs are rejected. Browser cookies, authorization replay, POST, blob/data URLs,
-HLS/DASH manifests, DRM and automatic interception are unsupported. Keep those
+DASH, encrypted media, DRM and automatic interception are unsupported. Keep those
 workflows in the browser. Browser admission acknowledges a durable queued job;
 choose Run queue in the running app to start it.
+
+## HLS VOD
+
+Choose HLS VOD in Add download, analyze the URL, select a quality, and save as
+`.mp4`. The extension can explicitly queue an HLS URL at the default highest
+quality. Find media candidates inspects the active tab only after a click; it
+never queues automatically. Candidate detection does not establish compatibility.
+
+The supported profile is explicit, unencrypted HLS VOD versions 1–3 with complete
+MPEG-TS segments, H.264 video and/or AAC-LC audio. Live/event streams, alternate
+audio, byte ranges, discontinuities, fragmented MP4 input and unknown extensions
+are rejected. Install both `ffmpeg` and `ffprobe` on PATH for assembly; they are
+optional external tools and are not bundled. See M7_EVIDENCE.md for limits.
+
+Objects are verified and cached separately from the final MP4. Resume validates
+cached objects before reuse. Once all objects are saved, missing-tool or assembly
+failures can be retried offline after correcting the tool installation. Completed
+caches remain until history removal; cancellation can keep or discard owned
+progress. Unproven files are preserved for inspection. A successful download
+requires verified assembly and safe destination publication.
+
+Real local MP4 assembly/playback, desktop quality selection and both browsers'
+HLS handoff have been exercised. The discovery permission dialog and real media
+playback on Windows/macOS have not been exercised interactively.
 
 ## Safe recovery
 
@@ -65,11 +89,11 @@ files (preserving ownership metadata) before updating. State defaults to
 `os.UserConfigDir()/idm-enhanced`; keep CLI and desktop pointed at the same state.
 Install the newer package over the existing installation, open the desktop and
 verify the queue and native-host registration. Linux uses the DEB/RPM package
-manager; Windows uses the per-user setup. The M6 workflow tests upgrade mechanics
+manager; Windows uses the per-user setup. The workflow tests upgrade mechanics
 using a controlled 0.5.0 predecessor package assembled from current sources and
-then 0.6.0. It does not claim an archived M5-binary upgrade test. Released schema
-migration compatibility is covered separately by storage fixtures; M6 keeps
-schema 4 and checkpoint v1 unchanged.
+then 0.7.0. It does not claim an archived M5-binary upgrade test. Released schema
+migration compatibility is covered separately by storage fixtures. M7 advances the database to schema 5 for media
+checkpoints and retains file checkpoint v1. Back up before this migration.
 
 Uninstall preserves downloads and application state. On Linux run the installed
 native-host --unregister as the normal user before removing the package. Windows

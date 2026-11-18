@@ -1,7 +1,7 @@
 # Contributing
 
-Read PROJECT_PLAN.md, docs/QUALITY_POLICY.md and AGENTS.md first. M0 is the active
-milestone. Features start after its acceptance evidence is complete.
+Read PROJECT_PLAN.md, docs/QUALITY_POLICY.md and AGENTS.md first. M7 adds the restricted HLS VOD profile;
+read docs/M7_EVIDENCE.md and its architecture decision before media changes.
 
 Install the pinned Go, Node and pnpm versions in tools/versions.json. Then run:
 
@@ -11,6 +11,9 @@ go run ./tools/quality doctor
 go run ./tools/quality check
 go run ./tools/quality check:full
 ```
+
+Full checks also require external `ffmpeg` and `ffprobe` on PATH for the real
+media fixture smoke. Ordinary checks use deterministic subprocess fixtures.
 
 `bootstrap-deps` fetches the complete pinned Go module graph and frozen pnpm dependencies for native CI. Full bootstrap also installs pinned Go executables under .tools/bin and frozen pnpm
 dependencies, then installs Lefthook. It requires network access; hooks do not.

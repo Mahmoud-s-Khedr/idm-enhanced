@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import * as Service from '../bindings/github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop/service';
+import type { Choice } from '../bindings/github.com/Mahmoud-s-Khedr/idm-enhanced/internal/media/models';
 import { DownloadRequest } from '../bindings/github.com/Mahmoud-s-Khedr/idm-enhanced/internal/desktop/models';
 
 export function AddDownload({ added }: { added: () => void }) {
@@ -7,14 +8,37 @@ export function AddDownload({ added }: { added: () => void }) {
   const [destination, setDestination] = useState('');
   const [checksum, setChecksum] = useState('');
   const [scheduled, setScheduled] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'' | 'analyzing' | 'adding'>('');
   const [message, setMessage] = useState('');
+  const [hls, setHLS] = useState(false);
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const [choice, setChoice] = useState('');
+  const analyze = async () => {
+    setBusy('analyzing');
+    setMessage('Analyzing HLS source…');
+    setChoices([]);
+    setChoice('');
+    try {
+      setChoices(await Service.AnalyzeMedia(url));
+      setMessage(
+        'HLS source analyzed. Choose a quality or use the highest bandwidth.',
+      );
+    } catch {
+      setMessage(
+        'Could not analyze HLS. Use a direct, unencrypted MPEG-TS VOD playlist; live, encrypted, fMP4 and alternate-audio sources are unsupported.',
+      );
+    } finally {
+      setBusy('');
+    }
+  };
   const submit = async () => {
-    setBusy(true);
+    setBusy('adding');
     try {
       await Service.Add(
         new DownloadRequest({
           url,
+          kind: hls ? 'hls' : '',
+          mediaChoice: hls ? choice : '',
           destination,
           sha256: checksum,
           scheduled: scheduled ? new Date(scheduled).toISOString() : '',
@@ -24,14 +48,18 @@ export function AddDownload({ added }: { added: () => void }) {
       setDestination('');
       setChecksum('');
       setScheduled('');
+      setChoices([]);
+      setChoice('');
       setMessage('Download added to the queue.');
       added();
     } catch {
       setMessage(
-        'Could not add download. Check the HTTP URL, new destination and checksum.',
+        hls
+          ? 'Could not add media. Check the HTTP playlist, selected quality and new MP4 destination.'
+          : 'Could not add download. Check the HTTP URL, new destination and checksum.',
       );
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   };
   const browse = async () => {
@@ -51,75 +79,146 @@ export function AddDownload({ added }: { added: () => void }) {
           void submit();
         }}
       >
-        <label>
-          Source URL
-          <input
-            required
-            type="url"
-            value={url}
-            placeholder="https://example.com/file.zip"
-            onChange={(e) => setURL(e.target.value)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              setURL(
-                e.dataTransfer
-                  .getData('text/uri-list')
-                  .split('\n')
-                  .find((line) => line && !line.startsWith('#')) ??
-                  e.dataTransfer.getData('text/plain'),
-              );
-            }}
-          />
-        </label>
-        <div>
-          <label htmlFor="download-destination">Save as</label>
-          <span className="input-row">
+        <fieldset disabled={!!busy}>
+          <label>
+            Source URL
             <input
-              id="download-destination"
               required
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              placeholder="Full path to a new file"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                void browse();
+              type="url"
+              value={url}
+              placeholder="https://example.com/file.zip"
+              onChange={(e) => {
+                setURL(e.target.value);
+                setChoices([]);
+                setChoice('');
               }}
-            >
-              Browse…
-            </button>
-          </span>
-        </div>
-        <details>
-          <summary>Schedule and verification</summary>
-          <label>
-            Start at (local time)
-            <input
-              type="datetime-local"
-              value={scheduled}
-              onChange={(e) => setScheduled(e.target.value)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                setChoices([]);
+                setChoice('');
+                setURL(
+                  e.dataTransfer
+                    .getData('text/uri-list')
+                    .split('\n')
+                    .find((line) => line && !line.startsWith('#')) ??
+                    e.dataTransfer.getData('text/plain'),
+                );
+              }}
             />
           </label>
-          <p className="hint">
-            One-time schedule in your current timezone (
-            {Intl.DateTimeFormat().resolvedOptions().timeZone}). Runs while this
-            app is open; overdue schedules run after wake or relaunch.
-          </p>
-          <label>
-            Expected SHA-256 (optional)
+          <label className="checkbox">
             <input
-              value={checksum}
-              onChange={(e) => setChecksum(e.target.value)}
-              pattern="[a-fA-F0-9]{64}"
-              placeholder="64 hexadecimal characters"
+              type="checkbox"
+              checked={hls}
+              onChange={(event) => {
+                setHLS(event.target.checked);
+                setChoices([]);
+                setChoice('');
+                setChecksum('');
+              }}
             />
+            HLS VOD media (MP4)
           </label>
-        </details>
-        <button className="primary" disabled={busy} type="submit">
-          {busy ? 'Adding…' : 'Add to queue'}
-        </button>
+          {hls && (
+            <div>
+              <p className="hint">
+                Unencrypted MPEG-TS VOD only. Requires FFmpeg and ffprobe.
+                Completed segments are retained for recovery until history is
+                removed.
+              </p>
+              <button
+                type="button"
+                disabled={!!busy || !url}
+                onClick={() => {
+                  void analyze();
+                }}
+              >
+                Analyze HLS
+              </button>
+              {choices.length > 0 && (
+                <label>
+                  Media quality
+                  <select
+                    value={choice}
+                    onChange={(event) => setChoice(event.target.value)}
+                  >
+                    <option value="">
+                      Highest bandwidth / source playlist
+                    </option>
+                    {choices
+                      .filter((item) => item.id !== '')
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.resolution || 'Unspecified resolution'} ·{' '}
+                          {item.bandwidth} bit/s ·{' '}
+                          {item.codecs || 'Inspect during assembly'}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
+          <div>
+            <label htmlFor="download-destination">Save as</label>
+            <span className="input-row">
+              <input
+                id="download-destination"
+                required
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                placeholder="Full path to a new file"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  void browse();
+                }}
+              >
+                Browse…
+              </button>
+            </span>
+          </div>
+          <details>
+            <summary>Schedule and verification</summary>
+            <label>
+              Start at (local time)
+              <input
+                type="datetime-local"
+                value={scheduled}
+                onChange={(e) => setScheduled(e.target.value)}
+              />
+            </label>
+            <p className="hint">
+              One-time schedule in your current timezone (
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}). Runs while
+              this app is open; overdue schedules run after wake or relaunch.
+            </p>
+            {!hls && (
+              <label>
+                Expected SHA-256 (optional)
+                <input
+                  value={checksum}
+                  onChange={(e) => setChecksum(e.target.value)}
+                  pattern="[a-fA-F0-9]{64}"
+                  placeholder="64 hexadecimal characters"
+                />
+              </label>
+            )}
+          </details>
+          <button
+            className="primary"
+            disabled={!!busy || (hls && choices.length === 0)}
+            type="submit"
+          >
+            {busy === 'analyzing'
+              ? 'Analyzing…'
+              : busy === 'adding'
+                ? 'Adding…'
+                : 'Add to queue'}
+          </button>
+        </fieldset>
         <p role="status">{message}</p>
       </form>
     </section>
