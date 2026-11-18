@@ -67,7 +67,10 @@ errors do not authorize automatic retry. Joined errors must all be retryable.
 Strong-validator progress is resumed; an interrupted stream without a strong
 validator restarts its owned partial during an automatic transient retry.
 
-Retry count and next attempt time are persisted. Startup pauses interrupted
+Retry count and next attempt time are persisted. A server Retry-After deadline
+is saved even when automatic retries are disabled/exhausted or its wait exceeds
+the automatic five-minute ceiling; explicit resume after relaunch still waits.
+Startup pauses interrupted
 retry waits; an explicit resume respects their remaining delay. Retry budget is
 per Run invocation; a new explicit resume starts a fresh bounded budget. No
 automatic application startup or background daemon is introduced.

@@ -68,7 +68,7 @@ func (m *Manager) run(ctx context.Context, id string, restart bool, progress fun
 	for attempt := 0; ; attempt++ {
 		err := m.runAttempt(ctx, id, restart, progress, attempt)
 		delay, retry := engine.RetryDelay(err)
-		if err == nil || !retry || attempt >= m.config.Retries {
+		if err == nil || !retry {
 			return err
 		}
 		// A no-validator stream cannot be resumed. It can be restarted safely only
@@ -81,9 +81,15 @@ func (m *Manager) run(ctx context.Context, id string, restart bool, progress fun
 			return err
 		}
 		restart = j.Effective != "" && !engine.StrongETag(j.ETag)
+		serverDelay := delay
 		delay = max(delay, m.config.Backoff*time.Duration(1<<attempt))
-		// Never shorten Retry-After. Excessive server waits require explicit retry.
-		if delay > 5*time.Minute {
+		// Exhausting the automatic budget must not discard a server's outstanding
+		// Retry-After. Explicit resume/relaunch still honors its persisted deadline.
+		if attempt >= m.config.Retries || delay > 5*time.Minute {
+			if serverDelay > 0 {
+				j.RetryAt = time.Now().Add(serverDelay).UTC()
+				return errors.Join(err, m.store.Save(ctx, j))
+			}
 			return err
 		}
 		j.RetryCount = attempt + 1

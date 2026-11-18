@@ -556,3 +556,57 @@ func TestInspectionCloseFailure(t *testing.T) {
 		t.Fatal("published after close failure")
 	}
 }
+
+func TestExhaustedBudgetPreservesRetryAfter(t *testing.T) {
+	for _, retries := range []int{0, 1} {
+		t.Run(fmt.Sprint(retries), func(t *testing.T) {
+			var calls atomic.Int32
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				n := calls.Add(1)
+				if n > int32(retries) {
+					w.Header().Set("Retry-After", "60")
+				}
+				w.WriteHeader(503)
+			}))
+			defer s.Close()
+			dir := t.TempDir()
+			m, err := Open(dir, false, s.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := DefaultConfig()
+			c.Retries = retries
+			c.Backoff = time.Millisecond
+			if err = m.Configure(c, s.Client()); err != nil {
+				t.Fatal(err)
+			}
+			j := m3Job(t, m, s.URL)
+			if err = m.Run(context.Background(), j.ID, false, nil); err == nil {
+				t.Fatal("accepted exhausted failure")
+			}
+			saved, err := m.store.Get(context.Background(), j.ID)
+			if err != nil || time.Until(saved.RetryAt) < 30*time.Second {
+				t.Fatal("lost outstanding Retry-After", saved.RetryAt, err)
+			}
+			if calls.Load() != int32(retries+1) {
+				t.Fatal("retry count", calls.Load())
+			}
+			if err = m.Close(); err != nil {
+				t.Fatal(err)
+			}
+			m, err = Open(dir, false, s.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = m.Close() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			defer cancel()
+			if err = m.Run(ctx, j.ID, false, nil); !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("resume bypassed wait", err)
+			}
+			if calls.Load() != int32(retries+1) {
+				t.Fatal("resume issued an early request", calls.Load())
+			}
+		})
+	}
+}

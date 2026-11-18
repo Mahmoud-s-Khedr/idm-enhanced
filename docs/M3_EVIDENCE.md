@@ -22,7 +22,8 @@ Fixtures cover exact segmented output, ignored-probe sequential fallback,
 weak/unknown representations, changed worker identity, short/overlong bodies,
 worker cancellation, failed checkpoints, request admission, active-job limits,
 global bandwidth pacing and cancellation, queue ordering/reopen, atomic reorder,
-transient retry success/exhaustion, Retry-After, retry-wait recovery, and permanent
+transient retry success/exhaustion, Retry-After (including exhausted/disabled
+automatic retries and resume after relaunch), retry-wait recovery, and permanent
 failure rejection. Migration fixtures upgrade the released M2 schema, retain its
 checkpoints, and verify rollback and read-only access.
 
@@ -45,7 +46,7 @@ All commands below passed locally on Linux amd64 with the pinned toolchains:
 - `go test -race -count=1 ./internal/engine ./internal/manager ./internal/storage ./internal/cli`
 - `git diff --check`
 
-Final full-check statement coverage: engine 95.7%, manager 91.6%, storage 90.4%,
+Final full-check statement coverage: engine 95.7%, manager 92.0%, storage 90.4%,
 CLI 95.9%. Critical thresholds remain 90% per package. Gitleaks and govulncheck
 reported no findings. pnpm audit retained the existing reviewed development-only
 picomatch applicability exception, expiring 2026-12-01; raw findings remain visible.
