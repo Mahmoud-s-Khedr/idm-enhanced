@@ -455,7 +455,11 @@ func TestPersistentQueueAndRetryWait(t *testing.T) {
 	dir := t.TempDir()
 	var order []string
 	var orderMu sync.Mutex
+	retryRequest := make(chan time.Time, 1)
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/retry" {
+			retryRequest <- time.Now()
+		}
 		orderMu.Lock()
 		order = append(order, r.URL.Path)
 		orderMu.Unlock()
@@ -503,15 +507,22 @@ func TestPersistentQueueAndRetryWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := m.store.Get(ctx, j.ID)
-	if got.State != "paused" || got.RetryAt.IsZero() {
+	if got.State != "paused" || !got.RetryAt.Equal(j.RetryAt) {
 		t.Fatal("lost retry wait", got)
 	}
-	start := time.Now()
 	if err = m.Run(ctx, j.ID, false, nil); err != nil {
 		t.Fatal(err)
 	}
-	if time.Since(start) < 50*time.Millisecond {
-		t.Fatal("ignored persisted Retry-After")
+	// Database sync/recovery may consume the remaining wait, especially on
+	// Windows. The contract is no HTTP request before the saved deadline, not
+	// a minimum delay measured after setup has already used part of that budget.
+	select {
+	case requested := <-retryRequest:
+		if requested.Before(j.RetryAt) {
+			t.Fatal("HTTP request preceded persisted Retry-After", requested, j.RetryAt)
+		}
+	default:
+		t.Fatal("retry never reached fixture")
 	}
 }
 func TestGlobalJobLimit(t *testing.T) {

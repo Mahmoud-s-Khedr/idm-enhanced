@@ -97,3 +97,15 @@ exact rational arithmetic through the integer tick ceiling. Regressions cover
 fixed-duration, finite and r=-1 timelines, exact decimal boundaries, nanosecond
 precision and a genuine fractional tick that still requires upward rounding.
 The float summary no longer determines addressing. Corrected-head local `check:full` passed again. Hosted required checks must pass before merge; an earlier green head is not inherited as evidence.
+
+## Hosted retry-fixture correction
+
+Run 44420698683 passed native Linux/macOS and Debian/Fedora installer checks, but
+Windows exposed an existing M3 timing assumption in TestPersistentQueueAndRetryWait.
+The fixture set a deadline 80 ms ahead before SQLite sync/recovery, then demanded
+at least 50 ms of delay measured only after that setup. Slow native persistence
+could correctly consume the deadline before Run, causing a false failure.
+The fixture now requires the exact RetryAt to survive recovery and records the
+actual HTTP request timestamp, rejecting any request before the saved deadline.
+It also requires the request to reach the fixture. Transfer/retry policy and
+coverage thresholds are unchanged. Corrected-head validation remains mandatory.
