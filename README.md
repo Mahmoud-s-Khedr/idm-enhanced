@@ -1,9 +1,10 @@
 # IDM Enhanced
 
 A local Go download manager in development. M0 supplies the desktop shell, quality
-gates and browser ping. M2 adds durable sequential CLI downloads and safe resume. Queues, full desktop
-workflows, media and installers remain later milestones. M2 has passed hosted
-platform acceptance; see [M2 evidence](docs/M2_EVIDENCE.md).
+gates and browser ping. M2 adds durable CLI downloads and safe resume. M3 adds
+parallel ranges, queues, shared limits and bounded retries; acceptance is tracked in
+[M3 evidence](docs/M3_EVIDENCE.md). Full desktop workflows, media and installers
+remain later milestones. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -34,7 +35,7 @@ go run ./tools/quality check:full
 go run ./tools/quality gate-probes
 ```
 
-## Durable CLI downloads (M2)
+## Durable CLI downloads
 
 ```sh
 go build -o build/downloader ./cmd/downloader
@@ -64,9 +65,41 @@ Destinations must be new files in an existing trusted directory on a local
 filesystem supporting hard links, reliable locks and persistent ownership metadata
 (extended attributes on Unix; named streams on Windows). Source URLs remain only in
 the protected database; status and diagnostics omit them. Command-line arguments
-may be visible to local processes. There is no cookie/header persistence, automatic
-retry, legacy partial import, or power-loss resilience claim. Windows directory
+may be visible to local processes. There is no cookie/header persistence, legacy partial import, or power-loss
+resilience claim. Windows directory
 flush is currently unsupported. See [M2 evidence](docs/M2_EVIDENCE.md).
+
+## Parallel downloads and queues (M3)
+
+```sh
+./build/downloader enqueue -o /path/to/first https://example.com/first
+./build/downloader enqueue -o /path/to/second https://example.com/second
+./build/downloader reorder SECOND_JOB_ID FIRST_JOB_ID
+./build/downloader run-queue -jobs 2 -workers 4 -per-host 4 -rate 1048576 -retries 3
+```
+
+Download/resume/restart also accept `-workers`, `-per-host`, `-rate` and `-retries`.
+`-rate` is a shared response-body bytes/second cap; zero is unlimited, with at most
+32 KiB of burst. Defaults are four workers, two jobs, four requests per hostname
+and three retries. Workers range from 1–16, jobs 1–16, host requests 1–64, retries
+0–8. Files over 4 MiB use parallel ranges when a strong validator and real range
+probe permit them. Other initial downloads stream sequentially. Parallel progress
+advances at committed windows; unsafe resume still requires explicit restart.
+
+Enqueue persists a job without transferring. Reorder requires every queued ID
+exactly once and commits the order atomically. Run-queue drains a snapshot of queued
+jobs; new enqueues wait for the next invocation. Paused/failed jobs require explicit
+resume/restart. The CLI's timeout applies to the whole drain; Ctrl+C stops admission
+and checkpoints active transfers. One failed job does not stop the others, but the
+drain returns failure. At most 1,000 unfinished jobs are admitted by default.
+
+Transient failures retry with exponential backoff and respect Retry-After. Server
+waits longer than five minutes require explicit retry. Interrupted no-validator
+streams restart during automatic retry; strong-validator progress resumes.
+Retry waits persist and are respected by explicit resume after relaunch. A new
+explicit invocation starts a fresh bounded retry budget. Set `-retries 0` to disable
+automatic retry. There is no automatic startup drain. See
+[ADR 0004](docs/decisions/0004-m3-parallel-manager.md) for recovery and limit details.
 
 ## Run the platform spike
 

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/engine"
@@ -26,9 +27,13 @@ type Options struct {
 	Progress                 func(int64, int64)
 }
 type Manager struct {
-	store    *storage.Store
-	client   *http.Client
-	boundary func(string) error
+	store        *storage.Store
+	client       *http.Client
+	boundary     func(string) error
+	mu           sync.Mutex
+	active       map[string]context.CancelFunc
+	config       Config
+	queueRunning bool
 }
 
 func Open(dir string, readonly bool, client *http.Client) (*Manager, error) {
@@ -40,7 +45,10 @@ func OpenContext(ctx context.Context, dir string, readonly bool, client *http.Cl
 	if err != nil {
 		return nil, err
 	}
-	m := &Manager{store: s, client: client}
+	m := &Manager{store: s, active: make(map[string]context.CancelFunc)}
+	if err := m.Configure(DefaultConfig(), client); err != nil {
+		return nil, errors.Join(err, s.Close())
+	}
 	if !readonly {
 		if err := m.recoverContext(ctx); err != nil {
 			return nil, errors.Join(err, s.Close())
@@ -48,10 +56,33 @@ func OpenContext(ctx context.Context, dir string, readonly bool, client *http.Cl
 	}
 	return m, nil
 }
-func (m *Manager) Close() error                              { return m.store.Close() }
+func (m *Manager) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.active) > 0 || m.queueRunning {
+		return errors.New("manager is busy")
+	}
+	m.client.CloseIdleConnections()
+	return m.store.Close()
+}
 func (m *Manager) Status(ctx context.Context) ([]Job, error) { return m.store.List(ctx) }
 
 func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	jobs, err := m.store.List(ctx)
+	if err != nil {
+		return Job{}, err
+	}
+	pending := 0
+	for _, j := range jobs {
+		if j.State != "completed" && j.State != "cancelled" {
+			pending++
+		}
+	}
+	if pending >= m.config.QueueLimit {
+		return Job{}, errors.New("queue limit reached")
+	}
 	if o.Destination == "" {
 		return Job{}, errors.New("destination is required")
 	}
@@ -79,6 +110,9 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 		return Job{}, err
 	}
 	j := Job{Version: 1, ID: hex.EncodeToString(id), Source: o.URL, Destination: dest, Checksum: o.SHA256, Length: -1, State: "queued", Created: time.Now().UTC()}
+	for _, existing := range jobs {
+		j.QueueOrder = max(j.QueueOrder, existing.QueueOrder+1)
+	}
 	if err := m.store.Save(ctx, j); err != nil {
 		return Job{}, err
 	}
@@ -102,7 +136,8 @@ var transitions = map[string]string{
 	"needs_attention": " queued cancelled verifying",
 	"verifying":       " completed needs_attention failed paused",
 	"completed":       "",
-	"failed":          " inspecting queued cancelled needs_attention",
+	"failed":          " inspecting queued cancelled needs_attention paused retry_wait",
+	"retry_wait":      " inspecting queued paused cancelled needs_attention failed",
 	"cancelled":       " inspecting queued needs_attention verifying",
 }
 
@@ -246,7 +281,7 @@ func (m *Manager) recoverContext(ctx context.Context) error {
 				continue
 			}
 		}
-		if j.State == "inspecting" || j.State == "downloading" || j.State == "pausing" || j.State == "verifying" {
+		if j.State == "inspecting" || j.State == "downloading" || j.State == "pausing" || j.State == "verifying" || j.State == "retry_wait" {
 			if err := m.transition(ctx, &j, "paused"); err != nil {
 				return err
 			}
@@ -301,8 +336,8 @@ func (w *checkpointWriter) checkpoint(ctx context.Context) error {
 	return w.manager.step("after-checkpoint")
 }
 
-// Run resumes an eligible job; restart is the explicit authority to discard progress.
-func (m *Manager) Run(ctx context.Context, id string, restart bool, progress func(int64, int64)) (err error) {
+// runAttempt uses the existing recovery and finalization path for one attempt.
+func (m *Manager) runAttempt(ctx context.Context, id string, restart bool, progress func(int64, int64), attempt int) (err error) {
 	j, err := m.store.Get(ctx, id)
 	if err != nil {
 		return err
@@ -310,6 +345,7 @@ func (m *Manager) Run(ctx context.Context, id string, restart bool, progress fun
 	if j.State == "completed" {
 		return nil
 	}
+	j.RetryAt = time.Time{}
 	if !restart && j.Phase == "verified" && j.State == "cancelled" {
 		if err := m.transition(ctx, &j, "verifying"); err != nil {
 			return err
@@ -321,6 +357,7 @@ func (m *Manager) Run(ctx context.Context, id string, restart bool, progress fun
 			return err
 		}
 	}
+	j.RetryCount = attempt
 	if j.State == "needs_attention" || j.Error == "discarded" {
 		return engine.ErrUnsafeResume
 	}
@@ -372,7 +409,7 @@ func (m *Manager) Run(ctx context.Context, id string, restart bool, progress fun
 	}
 	writer := &checkpointWriter{file: f, manager: m, job: &j, position: j.Durable, last: time.Now(), ctx: ctx}
 	if !resumed || j.Durable != j.Length {
-		_, err = engine.Stream(ctx, m.client, engine.Request{Source: j.Source, Resume: resumed, Offset: j.Durable, Identity: identity}, writer, func(n, total int64) {
+		_, err = m.stream(ctx, &j, identity, resumed, writer, func(n, total int64) {
 			if progress != nil {
 				progress(writer.position, total)
 			}
@@ -580,9 +617,16 @@ func (m *Manager) reset(ctx context.Context, j *Job) error {
 	j.Phase = ""
 	j.Digest = ""
 	j.Error = ""
+	j.RetryCount = 0
+	j.RetryAt = time.Time{}
 	return m.transition(ctx, j, "queued")
 }
 func (m *Manager) Cancel(ctx context.Context, id string, keep bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.active[id]; ok || m.queueRunning {
+		return errors.New("pause active job before cancellation")
+	}
 	j, err := m.store.Get(ctx, id)
 	if err != nil {
 		return err

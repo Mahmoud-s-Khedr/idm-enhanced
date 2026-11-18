@@ -19,6 +19,9 @@ import (
 //go:embed migrations/001.sql
 var migration string
 
+//go:embed migrations/002.sql
+var migrationM3 string
+
 type Interval struct {
 	Start, End int64
 	Digest     string
@@ -31,6 +34,9 @@ type Job struct {
 	Intervals                                                    []Interval
 	Digest                                                       string
 	Created, Updated                                             time.Time
+	QueueOrder                                                   int64
+	RetryCount                                                   int
+	RetryAt                                                      time.Time
 }
 type Store struct {
 	db   *sql.DB
@@ -130,7 +136,7 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 	if err = s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return nil, err
 	}
-	if version > 1 || (readonly && version != 1) {
+	if version > 2 || (readonly && version < 1) {
 		return nil, errors.New("unsupported database version")
 	}
 	if !readonly {
@@ -140,12 +146,15 @@ func Open(dir string, readonly bool) (_ *Store, err error) {
 		if err = s.configure("synchronous", "FULL", "2"); err != nil {
 			return nil, err
 		}
-		if version == 0 {
+		for target, script := range []string{migration, migrationM3} {
+			if version > target {
+				continue
+			}
 			tx, e := s.db.Begin()
 			if e != nil {
 				return nil, e
 			}
-			if _, e = tx.Exec(migration); e != nil {
+			if _, e = tx.Exec(script); e != nil {
 				return nil, errors.Join(e, tx.Rollback())
 			}
 			if err = tx.Commit(); err != nil {
@@ -165,22 +174,27 @@ func (s *Store) Close() error {
 	}
 	return err
 }
-func (s *Store) Save(ctx context.Context, j Job) error {
-	if j.Version != 1 {
-		return errors.New("unsupported checkpoint version")
-	}
-	j.Updated = time.Now().UTC()
-	b, err := json.Marshal(j)
-	if err != nil {
-		return err
-	}
+func (s *Store) Save(ctx context.Context, j Job) error { return s.SaveBatch(ctx, []Job{j}) }
+
+// SaveBatch commits a manager-owned queue reorder atomically.
+func (s *Store) SaveBatch(ctx context.Context, jobs []Job) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO jobs VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,generation=excluded.generation,durable=excluded.durable,record=excluded.record`, j.ID, j.Version, j.State, j.Generation, j.Durable, b)
-	if err != nil {
-		return errors.Join(err, tx.Rollback())
+	for _, j := range jobs {
+		if j.Version != 1 {
+			return errors.Join(errors.New("unsupported checkpoint version"), tx.Rollback())
+		}
+		j.Updated = time.Now().UTC()
+		b, err := json.Marshal(j)
+		if err != nil {
+			return errors.Join(err, tx.Rollback())
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO jobs VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,generation=excluded.generation,durable=excluded.durable,record=excluded.record`, j.ID, j.Version, j.State, j.Generation, j.Durable, b)
+		if err != nil {
+			return errors.Join(err, tx.Rollback())
+		}
 	}
 	return tx.Commit()
 }

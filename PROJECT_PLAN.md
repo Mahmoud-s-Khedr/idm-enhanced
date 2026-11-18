@@ -1,10 +1,10 @@
 # Cross-platform download manager — project plan
 
-Status: M0–M2 accepted with recorded evidence; M3 parallel engine/manager is next
+Status: M0–M2 accepted; M3 implemented pending protected acceptance; M4 desktop alpha follows
 
 Date: 2026-11-16
 
-Updated: 2026-11-17 — M2 hosted acceptance recorded; see docs/M2_EVIDENCE.md
+Updated: 2026-11-18 — M3 implementation; acceptance tracked in docs/M3_EVIDENCE.md
 
 Working name: IDM Enhanced; choose a distinct public product name before release
 

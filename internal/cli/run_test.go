@@ -147,3 +147,46 @@ func TestPersistentCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestQueueCommands(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "hello") }))
+	defer s.Close()
+	dir := t.TempDir()
+	ctx := context.Background()
+	run := func(args ...string) (int, string) {
+		var out bytes.Buffer
+		code := Run(ctx, append([]string{"--state-dir", dir}, args...), &out)
+		return code, out.String()
+	}
+	ids := make([]string, 0, 2)
+	destinations := make([]string, 0, 2)
+	for range 2 {
+		dest := filepath.Join(t.TempDir(), "result")
+		destinations = append(destinations, dest)
+		code, out := run("enqueue", "-o", dest, s.URL)
+		if code != 0 {
+			t.Fatal(code, out)
+		}
+		ids = append(ids, strings.Fields(out)[1])
+		if _, err := os.Stat(dest); !os.IsNotExist(err) {
+			t.Fatal("enqueue downloaded")
+		}
+	}
+	if code, out := run("reorder", ids[1], ids[0]); code != 0 {
+		t.Fatal(code, out)
+	}
+	if code, out := run("run-queue", "-jobs", "2", "-per-host", "1", "-workers", "1", "-rate", "65536", "-retries", "0"); code != 0 {
+		t.Fatal(code, out)
+	}
+	for _, dest := range destinations {
+		b, err := os.ReadFile(dest)
+		if err != nil || string(b) != "hello" {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"run-queue", "extra"}, {"enqueue"}, {"run-queue", "-workers", "0"}, {"reorder", "missing"}} {
+		if code, _ := run(args...); code == 0 {
+			t.Fatal("accepted invalid command", args)
+		}
+	}
+}

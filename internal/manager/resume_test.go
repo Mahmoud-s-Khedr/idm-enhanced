@@ -44,6 +44,12 @@ func fixture(t *testing.T) (*Manager, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// These fixtures inspect a single failed attempt before explicitly resuming.
+	c := DefaultConfig()
+	c.Retries = 0
+	if err := m.Configure(c, s.Client()); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = m.Close() })
 	return m, s.URL
 }
