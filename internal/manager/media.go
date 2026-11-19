@@ -37,8 +37,11 @@ type mediaCheckpoint struct {
 
 func decodeMedia(j Job) (mediaCheckpoint, error) {
 	var cp mediaCheckpoint
-	if len(j.Media) == 0 || len(j.Media) > 4<<20 || json.Unmarshal(j.Media, &cp) != nil || cp.Version != 1 || len(cp.Objects) == 0 || len(cp.Objects) != len(cp.Plan.Segments) || len(cp.Objects) > media.MaxObjects {
+	if len(j.Media) == 0 || len(j.Media) > 4<<20 || json.Unmarshal(j.Media, &cp) != nil || ((j.Kind == "hls" && cp.Version != 1) || (j.Kind == "dash" && cp.Version != 2)) || len(cp.Objects) == 0 || len(cp.Objects) != len(cp.Plan.Segments) || len(cp.Objects) > media.MaxObjects {
 		return cp, errMediaOwnership
+	}
+	if err := validateMediaTracks(j.Kind, cp.Plan, len(cp.Objects)); err != nil {
+		return cp, err
 	}
 	for _, r := range cp.Objects {
 		if r.File != "" && (filepath.Dir(r.File) != cp.Directory || r.Identity == "" || r.Ownership == "") {
@@ -96,7 +99,7 @@ func (m *Manager) checkMediaDirectory(j Job, cp mediaCheckpoint) error {
 	return nil
 }
 func (m *Manager) createMedia(ctx context.Context, j *Job) (mediaCheckpoint, error) {
-	plan, err := media.Resolve(ctx, m.client, j.Source, j.MediaChoice)
+	plan, err := media.ResolveKind(ctx, m.client, j.Source, j.MediaChoice, j.Kind)
 	if err != nil {
 		return mediaCheckpoint{}, err
 	}
@@ -104,7 +107,11 @@ func (m *Manager) createMedia(ctx context.Context, j *Job) (mediaCheckpoint, err
 	if err != nil {
 		return mediaCheckpoint{}, err
 	}
-	cp := mediaCheckpoint{Version: 1, Plan: plan, Directory: dir, Objects: make([]mediaObject, len(plan.Segments))}
+	version := 1
+	if j.Kind == "dash" {
+		version = 2
+	}
+	cp := mediaCheckpoint{Version: version, Plan: plan, Directory: dir, Objects: make([]mediaObject, len(plan.Segments))}
 	if err = localfs.Protect(dir, true); err != nil {
 		return cp, err
 	}
@@ -131,11 +138,11 @@ func allMediaComplete(cp mediaCheckpoint) bool {
 	return len(cp.Objects) > 0
 }
 func (m *Manager) inspectMediaResume(ctx context.Context, j *Job, cp *mediaCheckpoint) error {
-	plan, err := media.Resolve(ctx, m.client, j.Source, j.MediaChoice)
+	plan, err := media.ResolveKind(ctx, m.client, j.Source, j.MediaChoice, j.Kind)
 	if err != nil {
 		return err
 	}
-	if plan.SourceDigest != cp.Plan.SourceDigest || plan.PlaylistDigest != cp.Plan.PlaylistDigest || plan.PlaylistURL != cp.Plan.PlaylistURL || len(plan.Segments) != len(cp.Plan.Segments) {
+	if !sameMediaTracks(plan.Tracks, cp.Plan.Tracks) || plan.SourceDigest != cp.Plan.SourceDigest || plan.PlaylistDigest != cp.Plan.PlaylistDigest || plan.PlaylistURL != cp.Plan.PlaylistURL || len(plan.Segments) != len(cp.Plan.Segments) {
 		return engine.ErrUnsafeResume
 	}
 	for i, uri := range plan.Segments {
@@ -493,7 +500,38 @@ func (m *Manager) assembleMedia(ctx context.Context, j *Job, cp mediaCheckpoint)
 	if err = m.step("before-media-assembly"); err != nil {
 		return err
 	}
-	if err = assemble(ctx, reader, inputBytes, output); err != nil {
+	if j.Kind == "dash" {
+		var inputs []media.TrackInput
+		var readers []*mediaInput
+		start := 0
+		for _, track := range cp.Plan.Tracks {
+			r := &mediaInput{ctx: ctx, objects: cp.Objects[start:track.End]}
+			readers = append(readers, r)
+			var size int64
+			for _, o := range cp.Objects[start:track.End] {
+				size += o.Length
+			}
+			inputs = append(inputs, media.TrackInput{Reader: r, Bytes: size, Kind: track.Kind, Duration: cp.Plan.Duration})
+			start = track.End
+		}
+		mux := m.assembleTracks
+		if mux == nil {
+			mux = media.AssembleTracks
+		}
+		err = mux(ctx, inputs, output)
+		for _, r := range readers {
+			if err == nil && (r.next != len(r.objects) || r.file != nil) {
+				err = media.ErrAssembly
+			}
+			err = errors.Join(err, r.Close())
+		}
+		if err == nil {
+			reader.next = len(cp.Objects)
+		}
+	} else {
+		err = assemble(ctx, reader, inputBytes, output)
+	}
+	if err != nil {
 		return m.mediaFailure(j, err)
 	}
 	if reader.next != len(cp.Objects) || reader.file != nil {
@@ -601,7 +639,7 @@ type MediaSummary struct {
 }
 
 func MediaProgress(j Job) MediaSummary {
-	if j.Kind != "hls" || j.MediaObjects < 0 || j.MediaObjects > media.MaxObjects || j.MediaComplete < 0 || j.MediaComplete > j.MediaObjects || j.MediaBytes < 0 || j.MediaBytes > media.MaxObjectBytes*int64(j.MediaObjects) {
+	if (j.Kind != "hls" && j.Kind != "dash") || j.MediaObjects < 0 || j.MediaObjects > media.MaxObjects || j.MediaComplete < 0 || j.MediaComplete > j.MediaObjects || j.MediaBytes < 0 || j.MediaBytes > media.MaxObjectBytes*int64(j.MediaObjects) {
 		return MediaSummary{}
 	}
 	return MediaSummary{Objects: j.MediaObjects, Complete: j.MediaComplete, Bytes: j.MediaBytes}
@@ -638,4 +676,40 @@ func (s *Session) AnalyzeMedia(ctx context.Context, source string) ([]media.Choi
 	s.commands.Unlock()
 	defer func() { stop(); cancel(); s.analyses.Done() }()
 	return s.manager.AnalyzeMedia(ctx, source)
+}
+
+func sameMediaTracks(a, b []media.Track) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+func validateMediaTracks(kind string, p media.Plan, count int) error {
+	if kind == "hls" {
+		if len(p.Tracks) != 0 {
+			return errMediaOwnership
+		}
+		return nil
+	}
+	if kind != "dash" || p.Duration <= 0 || p.Duration > 86400 || len(p.Tracks) == 0 || len(p.Tracks) > 2 {
+		return errMediaOwnership
+	}
+	start := 0
+	seen := map[string]bool{}
+	for _, track := range p.Tracks {
+		if (track.Kind != "video" && track.Kind != "audio") || seen[track.Kind] || track.End < start+2 || track.End > count {
+			return errMediaOwnership
+		}
+		start = track.End
+		seen[track.Kind] = true
+	}
+	if start != count {
+		return errMediaOwnership
+	}
+	return nil
 }

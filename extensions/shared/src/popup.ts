@@ -50,9 +50,11 @@ async function submit(reuse: boolean): Promise<string> {
           url?.value ?? '',
           name?.value ?? '',
           undefined,
-          document.querySelector<HTMLInputElement>('#hls')?.checked
-            ? 'hls'
-            : '',
+          document.querySelector<HTMLInputElement>('#dash')?.checked
+            ? 'dash'
+            : document.querySelector<HTMLInputElement>('#hls')?.checked
+              ? 'hls'
+              : '',
         );
   await saveRequest(request);
   try {
@@ -128,6 +130,8 @@ useCandidate?.addEventListener('click', () => {
   if (url) url.value = item.url;
   if (name) name.value = '';
   if (hls) hls.checked = item.mode === 'hls';
+  const dash = document.querySelector<HTMLInputElement>('#dash');
+  if (dash) dash.checked = item.mode === 'dash';
   if (status)
     status.textContent =
       'Media URL selected. Review the source and queue explicitly.';

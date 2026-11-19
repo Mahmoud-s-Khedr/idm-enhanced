@@ -120,3 +120,14 @@ func TestHLSModeIsBoundedAndOnlyValidOnDownloadRequests(t *testing.T) {
 		}
 	}
 }
+
+func TestDASHModeRequiresExplicitDownload(t *testing.T) {
+	request := Message{Version: 1, ID: "dash", Type: "download", URL: "https://example.invalid/manifest.mpd", Filename: "manifest.mpd", Mode: "dash"}
+	if err := ValidateRequest(request); err != nil {
+		t.Fatal(err)
+	}
+	request.Type = "ping"
+	if err := ValidateRequest(request); err == nil {
+		t.Fatal("DASH ping accepted")
+	}
+}

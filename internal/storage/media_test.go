@@ -150,3 +150,73 @@ func TestMediaCheckpointTransactionsAndLazySnapshots(t *testing.T) {
 		t.Fatal("removed job returned")
 	}
 }
+
+func TestM8VersionBarrierPreservesHLSFilesAndReceipts(t *testing.T) {
+	ctx := context.Background()
+	directory := t.TempDir()
+	s, err := Open(directory, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hls := Job{Version: 1, ID: "retained-hls", Kind: "hls", State: "paused", MediaLoaded: true, Media: []byte(`{"Version":1,"Objects":[{"Digest":"kept"}]}`), MediaObjects: 1, MediaComplete: 1, MediaBytes: 4}
+	file := Job{Version: 1, ID: "retained-file", State: "paused", Durable: 4, Intervals: []Interval{{Start: 0, End: 4, Digest: "kept"}}}
+	if err = s.Save(ctx, hls); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SaveBrowser(ctx, file, "receipt", "fingerprint"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec("PRAGMA user_version=5"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	original := migrationM8
+	migrationM8 = "CREATE TABLE m8_rollback(x);invalid;"
+	_, err = Open(directory, false)
+	migrationM8 = original
+	if err == nil {
+		t.Fatal("broken migration succeeded")
+	}
+	ro, err := Open(directory, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version, count int
+	if err = ro.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+		t.Fatal(version, err)
+	}
+	if err = ro.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='m8_rollback'").Scan(&count); err != nil || count != 0 {
+		t.Fatal(count, err)
+	}
+	if err = ro.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(directory, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	got, err := s.Get(ctx, hls.ID)
+	if err != nil || string(got.Media) != string(hls.Media) || got.MediaComplete != 1 {
+		t.Fatal(got, err)
+	}
+	got, err = s.Get(ctx, file.ID)
+	if err != nil || got.Version != 1 || got.Durable != 4 || len(got.Intervals) != 1 {
+		t.Fatal(got, err)
+	}
+	if hash, id, e := s.BrowserRequest(ctx, "receipt"); e != nil || hash != "fingerprint" || id != file.ID {
+		t.Fatal(hash, id, e)
+	}
+	hls.ID = "dash"
+	hls.Kind = "dash"
+	hls.Media = []byte(`{"Version":2}`)
+	if err = s.Save(ctx, hls); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.Get(ctx, hls.ID)
+	if err != nil || string(got.Media) != string(hls.Media) {
+		t.Fatal(got, err)
+	}
+}

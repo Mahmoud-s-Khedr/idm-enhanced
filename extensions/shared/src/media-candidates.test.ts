@@ -12,6 +12,7 @@ test('discovers explicit media elements and recent manifest URLs without credent
       { name: 'https://cdn.invalid/movie.mp4' },
       { name: 'https://cdn.invalid/list.m3u8?token=private#part' },
       { name: 'https://cdn.invalid/style.css' },
+      { name: 'https://cdn.invalid/index.mpd?secret=private' },
       { name: 'https://cdn.invalid/tone.ogg' },
     ],
   });
@@ -24,7 +25,10 @@ test('discovers explicit media elements and recent manifest URLs without credent
       'https://cdn.invalid/tone.ogg',
     ]),
   );
-  expect(result).toHaveLength(4);
+  expect(result).toHaveLength(5);
+  expect(result.find((item) => item.mode === 'dash')?.label).toContain(
+    'DASH candidate',
+  );
   expect(result.find((item) => item.mode === 'hls')?.label).toContain(
     'HLS candidate',
   );

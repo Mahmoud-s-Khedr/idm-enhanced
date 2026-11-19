@@ -1,6 +1,6 @@
 // Real native WebView/Wails smoke. Requires an interactive display; never runs
 // an installer, changes keyboard settings, or reads the user's download state.
-import { hlsFixture } from './hls-fixture.mjs';
+import { mediaFixture } from './media-fixtures.mjs';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, readdirSync } from 'node:fs';
@@ -13,9 +13,10 @@ const temporary = mkdtempSync(join(tmpdir(), 'idm-desktop-'));
 const data = Buffer.alloc(8 * 1024 * 1024, 'd');
 const checksum = createHash('sha256').update(data).digest('hex');
 const server = createServer((request, response) => {
-  const content = request.url?.startsWith('/hls/')
-    ? hlsFixture(request.url)
-    : data;
+  const content =
+    request.url?.startsWith('/hls/') || request.url?.startsWith('/dash/')
+      ? mediaFixture(request.url)
+      : data;
   if (!content) {
     response.writeHead(404).end();
     return;
@@ -68,6 +69,7 @@ try {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const destination = join(temporary, 'output.bin');
   const mediaDestination = join(temporary, 'media-output.mp4');
+  const dashDestination = join(temporary, 'dash-output.mp4');
   let logs = '';
   child = spawn(
     resolve('build/desktop-smoke'),
@@ -81,6 +83,8 @@ try {
           checksum,
           mediaURL: `http://127.0.0.1:${server.address().port}/hls/master.m3u8`,
           mediaDestination,
+          dashURL: `http://127.0.0.1:${server.address().port}/dash/manifest.mpd`,
+          dashDestination,
         }),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -107,27 +111,29 @@ try {
     checksum
   )
     throw new Error('Output differs or history removal deleted completed data');
-  const mediaInfo = JSON.parse(
-    execFileSync(
-      'ffprobe',
-      [
-        '-v',
-        'error',
-        '-show_entries',
-        'stream=codec_type,width',
-        '-of',
-        'json',
-        mediaDestination,
-      ],
-      { encoding: 'utf8' },
-    ),
-  );
-  if (
-    !mediaInfo.streams.some(
-      (stream) => stream.codec_type === 'video' && stream.width === 128,
+  for (const path of [mediaDestination, dashDestination]) {
+    const mediaInfo = JSON.parse(
+      execFileSync(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'stream=codec_type,width',
+          '-of',
+          'json',
+          path,
+        ],
+        { encoding: 'utf8' },
+      ),
+    );
+    if (
+      !mediaInfo.streams.some(
+        (stream) => stream.codec_type === 'video' && stream.width === 128,
+      )
     )
-  )
-    throw new Error('Wrong native HLS quality');
+      throw new Error('Wrong native media quality');
+  }
   if (
     readdirSync(join(temporary, 'state')).some((name) =>
       name.startsWith('media-'),
@@ -135,7 +141,7 @@ try {
   )
     throw new Error('History removal left media cache');
   console.log(
-    'PASS native WebView: settings, add, cancel focus/Escape, 200% text reflow, checksum, run, pause, resume, history, metadata-only removal, HLS analyze/quality/MP4 playback and cache cleanup, close and safe quit',
+    'PASS native WebView: settings, add, cancel focus/Escape, 200% text reflow, checksum, run, pause, resume, history, metadata-only removal, HLS/DASH analyze/quality/audio/MP4 playback and cache cleanup, close and safe quit',
   );
 } finally {
   child?.kill('SIGTERM');

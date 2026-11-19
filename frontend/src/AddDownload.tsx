@@ -11,21 +11,24 @@ export function AddDownload({ added }: { added: () => void }) {
   const [busy, setBusy] = useState<'' | 'analyzing' | 'adding'>('');
   const [message, setMessage] = useState('');
   const [hls, setHLS] = useState(false);
+  const [dash, setDASH] = useState(false);
+  const mediaMode = hls || dash;
+  const format = dash ? 'DASH' : 'HLS';
   const [choices, setChoices] = useState<Choice[]>([]);
   const [choice, setChoice] = useState('');
   const analyze = async () => {
     setBusy('analyzing');
-    setMessage('Analyzing HLS source…');
+    setMessage(`Analyzing ${format} source…`);
     setChoices([]);
     setChoice('');
     try {
       setChoices(await Service.AnalyzeMedia(url));
       setMessage(
-        'HLS source analyzed. Choose a quality or use the highest bandwidth.',
+        `${format} source analyzed. Choose quality and audio, or use the highest bandwidth.`,
       );
     } catch {
       setMessage(
-        'Could not analyze HLS. Use a direct, unencrypted MPEG-TS VOD playlist; live, encrypted, fMP4 and alternate-audio sources are unsupported.',
+        `Could not analyze ${format}. Use supported unencrypted VOD: HLS MPEG-TS or static single-period DASH H.264/AAC. Live, encrypted and unsupported track layouts stay in the browser.`,
       );
     } finally {
       setBusy('');
@@ -37,8 +40,8 @@ export function AddDownload({ added }: { added: () => void }) {
       await Service.Add(
         new DownloadRequest({
           url,
-          kind: hls ? 'hls' : '',
-          mediaChoice: hls ? choice : '',
+          kind: dash ? 'dash' : hls ? 'hls' : '',
+          mediaChoice: mediaMode ? choice : '',
           destination,
           sha256: checksum,
           scheduled: scheduled ? new Date(scheduled).toISOString() : '',
@@ -54,7 +57,7 @@ export function AddDownload({ added }: { added: () => void }) {
       added();
     } catch {
       setMessage(
-        hls
+        mediaMode
           ? 'Could not add media. Check the HTTP playlist, selected quality and new MP4 destination.'
           : 'Could not add download. Check the HTTP URL, new destination and checksum.',
       );
@@ -113,6 +116,7 @@ export function AddDownload({ added }: { added: () => void }) {
               checked={hls}
               onChange={(event) => {
                 setHLS(event.target.checked);
+                setDASH(false);
                 setChoices([]);
                 setChoice('');
                 setChecksum('');
@@ -120,12 +124,26 @@ export function AddDownload({ added }: { added: () => void }) {
             />
             HLS VOD media (MP4)
           </label>
-          {hls && (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={dash}
+              onChange={(event) => {
+                setDASH(event.target.checked);
+                setHLS(false);
+                setChoices([]);
+                setChoice('');
+                setChecksum('');
+              }}
+            />
+            DASH VOD media (MP4)
+          </label>
+          {mediaMode && (
             <div>
               <p className="hint">
-                Unencrypted MPEG-TS VOD only. Requires FFmpeg and ffprobe.
-                Completed segments are retained for recovery until history is
-                removed.
+                Unencrypted HLS MPEG-TS or static DASH H.264/AAC only. Requires
+                FFmpeg and ffprobe. Completed segments are retained for recovery
+                until history is removed.
               </p>
               <button
                 type="button"
@@ -134,7 +152,7 @@ export function AddDownload({ added }: { added: () => void }) {
                   void analyze();
                 }}
               >
-                Analyze HLS
+                Analyze {format}
               </button>
               {choices.length > 0 && (
                 <label>
@@ -195,7 +213,7 @@ export function AddDownload({ added }: { added: () => void }) {
               {Intl.DateTimeFormat().resolvedOptions().timeZone}). Runs while
               this app is open; overdue schedules run after wake or relaunch.
             </p>
-            {!hls && (
+            {!mediaMode && (
               <label>
                 Expected SHA-256 (optional)
                 <input
@@ -209,7 +227,7 @@ export function AddDownload({ added }: { added: () => void }) {
           </details>
           <button
             className="primary"
-            disabled={!!busy || (hls && choices.length === 0)}
+            disabled={!!busy || (mediaMode && choices.length === 0)}
             type="submit"
           >
             {busy === 'analyzing'

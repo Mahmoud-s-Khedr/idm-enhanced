@@ -77,7 +77,8 @@ export async function pending(): Promise<Pending | undefined> {
     typeof r.filename !== 'string'
   )
     return undefined;
-  if ('mode' in r && r.mode !== '' && r.mode !== 'hls') return undefined;
+  if ('mode' in r && r.mode !== '' && r.mode !== 'hls' && r.mode !== 'dash')
+    return undefined;
   return {
     request: {
       version: 1,
@@ -85,7 +86,9 @@ export async function pending(): Promise<Pending | undefined> {
       id: r.id,
       url: r.url,
       filename: r.filename,
-      ...('mode' in r && r.mode === 'hls' ? { mode: 'hls' } : {}),
+      ...('mode' in r && (r.mode === 'hls' || r.mode === 'dash')
+        ? { mode: r.mode }
+        : {}),
     },
     status: value.status,
     accepted: 'accepted' in value && value.accepted === true,

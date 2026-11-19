@@ -5,7 +5,7 @@ export function downloadRequest(
   source: string,
   filename: string,
   id: string = crypto.randomUUID(),
-  mode: '' | 'hls' = '',
+  mode: '' | 'hls' | 'dash' = '',
 ): Message {
   const url = new URL(source);
   if (

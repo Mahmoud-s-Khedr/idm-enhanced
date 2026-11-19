@@ -6,7 +6,7 @@ const badge = vi.fn();
 const query = vi.fn();
 const execute = vi.fn();
 const html =
-  '<button id="discover">Find</button><select id="candidates"></select><button id="use-candidate" disabled>Use</button><form><input id="url" value="https://example.invalid/file"/><input id="filename"/><input id="hls" type="checkbox"/><button type="submit">Queue</button></form><button id="retry">Retry</button><button id="connect">Connect</button><output></output>';
+  '<button id="discover">Find</button><select id="candidates"></select><button id="use-candidate" disabled>Use</button><form><input id="url" value="https://example.invalid/file"/><input id="filename"/><input id="hls" type="checkbox"/><input id="dash" type="checkbox"/><button type="submit">Queue</button></form><button id="retry">Retry</button><button id="connect">Connect</button><output></output>';
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -144,46 +144,49 @@ test('empty retry does not send a new download', async () => {
   expect(send).not.toHaveBeenCalled();
 });
 
-test('HLS handoff retries the same persisted mode after acknowledgement loss', async () => {
-  await popup();
-  let saved: Record<string, unknown> = {};
-  get.mockImplementation(() => Promise.resolve(saved));
-  set.mockImplementation((value: Record<string, unknown>) => {
-    saved = value;
-    return Promise.resolve();
-  });
-  send
-    .mockRejectedValueOnce(new Error('acknowledgement lost'))
-    .mockImplementation((_host, message: { id: string }) =>
-      Promise.resolve({
-        version: 1,
-        id: message.id,
-        type: 'accepted',
-        jobId: 'media-job',
-      }),
+test.each(['hls', 'dash'])(
+  '%s handoff retries the same persisted mode after acknowledgement loss',
+  async (mode) => {
+    await popup();
+    let saved: Record<string, unknown> = {};
+    get.mockImplementation(() => Promise.resolve(saved));
+    set.mockImplementation((value: Record<string, unknown>) => {
+      saved = value;
+      return Promise.resolve();
+    });
+    send
+      .mockRejectedValueOnce(new Error('acknowledgement lost'))
+      .mockImplementation((_host, message: { id: string }) =>
+        Promise.resolve({
+          version: 1,
+          id: message.id,
+          type: 'accepted',
+          jobId: 'media-job',
+        }),
+      );
+    const hls = document.querySelector<HTMLInputElement>(`#${mode}`);
+    if (!hls) throw new Error('missing HLS choice');
+    hls.checked = true;
+    document.querySelector('form')?.requestSubmit();
+    await vi.waitFor(() =>
+      expect(document.querySelector('output')?.textContent).toContain(
+        'acknowledgement lost',
+      ),
     );
-  const hls = document.querySelector<HTMLInputElement>('#hls');
-  if (!hls) throw new Error('missing HLS choice');
-  hls.checked = true;
-  document.querySelector('form')?.requestSubmit();
-  await vi.waitFor(() =>
-    expect(document.querySelector('output')?.textContent).toContain(
-      'acknowledgement lost',
-    ),
-  );
-  const first = send.mock.calls[0]?.[1];
-  expect(first).toEqual(expect.objectContaining({ mode: 'hls' }));
-  document.querySelector<HTMLButtonElement>('#retry')?.click();
-  await vi.waitFor(() =>
-    expect(document.querySelector('output')?.textContent).toContain(
-      'Queued in desktop as media-job',
-    ),
-  );
-  expect(send).toHaveBeenLastCalledWith(
-    'com.idmenhanced.desktop',
-    expect.objectContaining({ id: first.id, mode: 'hls' }),
-  );
-});
+    const first = send.mock.calls[0]?.[1];
+    expect(first).toEqual(expect.objectContaining({ mode }));
+    document.querySelector<HTMLButtonElement>('#retry')?.click();
+    await vi.waitFor(() =>
+      expect(document.querySelector('output')?.textContent).toContain(
+        'Queued in desktop as media-job',
+      ),
+    );
+    expect(send).toHaveBeenLastCalledWith(
+      'com.idmenhanced.desktop',
+      expect.objectContaining({ id: first.id, mode }),
+    );
+  },
+);
 
 test('tab discovery requires an explicit candidate choice and does not queue automatically', async () => {
   await popup();

@@ -60,12 +60,23 @@ test('context link handoff persists before sending and presents both outcomes', 
     ),
   );
   await vi.waitFor(() => expect(badge.mock.calls.length).toBe(2));
+  click({
+    menuItemId: 'download-dash',
+    linkUrl: 'https://example.invalid/manifest.mpd',
+  });
+  await vi.waitFor(() =>
+    expect(send).toHaveBeenLastCalledWith(
+      'com.idmenhanced.desktop',
+      expect.objectContaining({ mode: 'dash' }),
+    ),
+  );
+  await vi.waitFor(() => expect(badge.mock.calls.length).toBe(3));
   send.mockRejectedValue(new Error('offline'));
   click({ menuItemId: 'download', linkUrl: 'https://example.invalid/file' });
   await vi.waitFor(() => expect(badge).toHaveBeenCalledWith({ text: '!' }));
   set.mockRejectedValue(new Error('storage'));
   click({ menuItemId: 'download', linkUrl: 'https://example.invalid/file' });
-  await vi.waitFor(() => expect(badge.mock.calls.length).toBe(4));
+  await vi.waitFor(() => expect(badge.mock.calls.length).toBe(5));
 });
 
 test('older context acknowledgement preserves the newer failed handoff for popup retry', async () => {

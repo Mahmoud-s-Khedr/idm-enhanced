@@ -5,6 +5,7 @@ import (
 	"context"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/engine"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -16,20 +17,29 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 	}
 	return b.Buffer.Write(p)
 }
-func fetch(ctx context.Context, client *http.Client, source string) (Playlist, string, error) {
+func fetchDocument(ctx context.Context, client *http.Client, source string) ([]byte, string, error) {
 	if len(source) > 16384 {
-		return Playlist{}, "", ErrLimit
+		return nil, "", ErrLimit
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	var buffer boundedBuffer
 	representation, err := engine.Stream(ctx, client, engine.Request{Source: source}, &buffer, nil, nil)
 	if err != nil {
+		return nil, "", err
+	}
+	return buffer.Bytes(), representation.Effective, nil
+}
+
+func fetch(ctx context.Context, client *http.Client, source string) (Playlist, string, error) {
+	body, effective, err := fetchDocument(ctx, client, source)
+	if err != nil {
 		return Playlist{}, "", err
 	}
-	p, err := Parse(buffer.Bytes(), representation.Effective)
-	return p, representation.Effective, err
+	p, err := Parse(body, effective)
+	return p, effective, err
 }
+func dashDocument(body []byte) bool { return strings.HasPrefix(strings.TrimSpace(string(body)), "<") }
 
 // Choice deliberately excludes playlist URLs and signed queries.
 type Choice struct {
@@ -41,15 +51,31 @@ type Choice struct {
 
 // Analyze returns selectable metadata while keeping request URLs private.
 func Analyze(ctx context.Context, client *http.Client, source string) ([]Choice, error) {
-	p, _, err := fetch(ctx, client, source)
+	body, effective, err := fetchDocument(ctx, client, source)
 	if err != nil {
 		return nil, err
 	}
-	if len(p.Variants) == 0 {
+	var variants []Variant
+	if dashDocument(body) {
+		plans, e := ParseDASH(body, effective)
+		if e != nil {
+			return nil, e
+		}
+		for _, plan := range plans {
+			variants = append(variants, plan.Variant)
+		}
+	} else {
+		p, e := Parse(body, effective)
+		if e != nil {
+			return nil, e
+		}
+		variants = p.Variants
+	}
+	if len(variants) == 0 {
 		return []Choice{{ID: "", Bandwidth: 0, Resolution: "Source playlist"}}, nil
 	}
-	choices := make([]Choice, 0, len(p.Variants))
-	for _, v := range p.Variants {
+	choices := make([]Choice, 0, len(variants))
+	for _, v := range variants {
 		choices = append(choices, Choice{v.ID, v.Bandwidth, v.Resolution, v.Codecs})
 	}
 	return choices, nil
@@ -91,4 +117,30 @@ func Resolve(ctx context.Context, client *http.Client, source, choice string) (P
 	plan.Segments = child.Segments
 	plan.Duration = child.Duration
 	return plan, nil
+}
+
+// ResolveKind keeps explicit protocol admission from changing semantics when a
+// source changes format; analysis alone may inspect either manifest type.
+func ResolveKind(ctx context.Context, client *http.Client, source, choice, kind string) (Plan, error) {
+	if kind == "hls" {
+		return Resolve(ctx, client, source, choice)
+	}
+	body, effective, err := fetchDocument(ctx, client, source)
+	if err != nil {
+		return Plan{}, err
+	}
+	plans, err := ParseDASH(body, effective)
+	if err != nil {
+		return Plan{}, err
+	}
+	var selected Plan
+	for _, p := range plans {
+		if (choice != "" && p.Variant.ID == choice) || (choice == "" && p.Variant.Bandwidth > selected.Variant.Bandwidth) {
+			selected = p
+		}
+	}
+	if len(selected.Tracks) == 0 {
+		return Plan{}, ErrUnsupported
+	}
+	return selected, nil
 }

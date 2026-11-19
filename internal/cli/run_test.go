@@ -217,3 +217,24 @@ func TestCLIHLSAnalysisQueueAndStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestCLIDASHAdmissionAndExclusiveModes(t *testing.T) {
+	state := t.TempDir()
+	destination := filepath.Join(t.TempDir(), "dash.mp4")
+	run := func(args ...string) (int, string) {
+		var out bytes.Buffer
+		code := Run(context.Background(), append([]string{"--state-dir", state}, args...), &out)
+		return code, out.String()
+	}
+	if code, out := run("enqueue", "-dash", "-o", destination, "https://example.invalid/manifest.mpd"); code != 0 {
+		t.Fatal(code, out)
+	}
+	if code, out := run("status"); code != 0 || !strings.Contains(out, "media objects=0/0") {
+		t.Fatal(code, out)
+	}
+	for _, args := range [][]string{{"enqueue", "-dash", "-hls", "-o", destination, "https://example.invalid"}, {"status", "-dash"}} {
+		if code, _ := run(args...); code != 2 {
+			t.Fatal("accepted conflicting mode", args, code)
+		}
+	}
+}

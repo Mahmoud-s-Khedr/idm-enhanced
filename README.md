@@ -5,7 +5,7 @@ gates and browser ping. M2 adds durable CLI downloads and safe resume. M3 adds
 parallel ranges, queues, shared limits and bounded retries; acceptance is tracked in
 [M3 evidence](docs/M3_EVIDENCE.md). M4 adds desktop download management, history, persisted settings,
 one-time schedules and native lifecycle controls; see [M4 evidence](docs/M4_EVIDENCE.md).
-M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). M6 hardening adds accessible cancellation/progress, recovery guidance and upgrade checks; see [M6 evidence](docs/M6_EVIDENCE.md) and the [support/update guide](docs/SUPPORT.md). Human beta feedback remains pending. M7 adds a bounded HLS VOD profile; see [M7 evidence](docs/M7_EVIDENCE.md). DASH remains later work. [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
+M5 adds explicit browser handoff and alpha installable packages; see [M5 evidence](docs/M5_EVIDENCE.md). M6 hardening adds accessible cancellation/progress, recovery guidance and upgrade checks; see [M6 evidence](docs/M6_EVIDENCE.md) and the [support/update guide](docs/SUPPORT.md). Human beta feedback remains pending. M7 adds a bounded HLS VOD profile; see [M7 evidence](docs/M7_EVIDENCE.md). M8 adds bounded static DASH with video/audio selection and offline mux recovery; see [M8 evidence](docs/M8_EVIDENCE.md). [M2 evidence](docs/M2_EVIDENCE.md) records its acceptance.
 
 MIT licensed. See [project scope](PROJECT_PLAN.md), [quality policy](docs/QUALITY_POLICY.md),
 [contribution guide](CONTRIBUTING.md) and [platform evidence](docs/M0_EVIDENCE.md).
@@ -150,8 +150,8 @@ CI's **Quality** workflow uploads 30-day artifacts for every PR and main build:
 Each includes Firefox unsigned `.xpi`, Chrome `.zip` and `SHA256SUMS`. Download
 from the successful Actions run's Artifacts section and verify checksums. These
 are unsigned alpha packages, without store publication or signing. Install Linux
-with `sudo apt install ./idm-enhanced_0.7.0_amd64.deb` or
-`sudo dnf install ./idm-enhanced-0.7.0-1.x86_64.rpm`; launch IDM Enhanced from the
+with `sudo apt install ./idm-enhanced_0.8.0_amd64.deb` or
+`sudo dnf install ./idm-enhanced-0.8.0-1.x86_64.rpm`; launch IDM Enhanced from the
 application menu. Windows setup installs for the current user without elevation.
 
 Open the desktop once to register its sibling native host. For Firefox, temporarily
@@ -262,3 +262,22 @@ byte-range, discontinuity and alternate-audio playlists are rejected. Keep
 unsupported or session-authenticated sources in the browser. See the exact
 [support and recovery matrix](docs/SUPPORT.md). Full checks require the real media
 tools; ordinary checks do not install them or silently substitute fake playback.
+
+## Static DASH VOD (M8)
+
+Select DASH VOD in the desktop, analyze a static MPD, choose the video/audio
+combination and save to a new MP4. The extension offers explicit DASH handoff and
+opt-in `.mpd` candidates; handoff queues the highest-bandwidth combination.
+
+```sh
+go run ./cmd/downloader media-info https://example.com/manifest.mpd
+go run ./cmd/downloader -dash -quality CHOICE_ID -o video.mp4 https://example.com/manifest.mpd
+```
+
+The supported profile is single-Period, unencrypted H.264/AAC fragmented MP4 with
+SegmentTemplate initialization and finite duration/timeline addressing with aligned presentation ends. Requires
+separately installed FFmpeg and ffprobe. Completed objects can assemble offline;
+failed or interrupted jobs use the existing Resume / retry workflow. Database
+schema 6 prevents older binaries from opening new DASH state; back up before
+upgrading. See [support matrix](docs/SUPPORT.md), [M8 evidence](docs/M8_EVIDENCE.md)
+and [ADR 0008](docs/decisions/0008-m8-dash-vod.md). Human beta testing remains pending.

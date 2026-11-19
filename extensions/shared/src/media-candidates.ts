@@ -1,6 +1,6 @@
 export interface MediaCandidate {
   url: string;
-  mode: '' | 'hls';
+  mode: '' | 'hls' | 'dash';
   label: string;
 }
 
@@ -21,10 +21,12 @@ export function findMediaCandidates(): MediaCandidate[] {
       )
         return;
       url.hash = '';
+      const dash = /\.mpd$/i.test(url.pathname);
       const hls = /\.m3u8$/i.test(url.pathname);
       if (
         !observed &&
         !hls &&
+        !dash &&
         !/\.(mp4|webm|m4a|mp3|ogg|wav|aac)$/i.test(url.pathname)
       )
         return;
@@ -33,8 +35,8 @@ export function findMediaCandidates(): MediaCandidate[] {
       const name = url.pathname.split('/').at(-1)?.slice(0, 80) || 'media';
       result.push({
         url: url.href,
-        mode: hls ? 'hls' : '',
-        label: `${hls ? 'HLS candidate' : 'Direct media'} · ${url.hostname} · ${name}`,
+        mode: dash ? 'dash' : hls ? 'hls' : '',
+        label: `${dash ? 'DASH candidate' : hls ? 'HLS candidate' : 'Direct media'} · ${url.hostname} · ${name}`,
       });
     } catch {
       /* Malformed page-provided URLs stay in the browser. */

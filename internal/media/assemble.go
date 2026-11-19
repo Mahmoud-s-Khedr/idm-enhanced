@@ -6,26 +6,34 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/engine"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/localfs"
 	"io"
 	"math"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 )
 
-var ErrDependency = errors.New("install FFmpeg and ffprobe to assemble HLS media")
-var ErrAssembly = errors.New("HLS assembly or output validation failed")
+var ErrDependency = errors.New("install FFmpeg and ffprobe to assemble media")
+var ErrAssembly = errors.New("media assembly or output validation failed")
 
 type cappedWriter struct {
 	writer    io.Writer
 	remaining int64
 	cancel    context.CancelFunc
 	exceeded  bool
+	ctx       context.Context
 }
 
 func (w *cappedWriter) Write(p []byte) (int, error) {
+	if w.ctx != nil {
+		if err := w.ctx.Err(); err != nil {
+			return 0, err
+		}
+	}
 	if int64(len(p)) > w.remaining {
 		w.exceeded = true
 		if w.cancel != nil {
@@ -65,6 +73,11 @@ func Assemble(ctx context.Context, input io.Reader, inputBytes int64, output *os
 	return assemble(ctx, input, inputBytes, output, tools{"ffmpeg", "ffprobe"})
 }
 func assemble(ctx context.Context, input io.Reader, inputBytes int64, output *os.File, binaries tools) error {
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-max_alloc", "67108864", "-threads", "1", "-protocol_whitelist", "pipe", "-f", "mpegts", "-i", "pipe:0", "-map", "0:v?", "-map", "0:a?", "-map_metadata", "-1", "-map_chapters", "-1", "-c", "copy", "-bsf:a", "aac_adtstoasc", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "pipe:1"}
+	return runAssembly(ctx, input, inputBytes, output, binaries, args, nil, 0, "")
+}
+
+func runAssembly(ctx context.Context, input io.Reader, inputBytes int64, output *os.File, binaries tools, args []string, expected []string, duration float64, stagedOutput string) error {
 	ffmpeg, err := exec.LookPath(binaries.ffmpeg)
 	if err != nil {
 		return ErrDependency
@@ -73,7 +86,7 @@ func assemble(ctx context.Context, input io.Reader, inputBytes int64, output *os
 	if err != nil {
 		return ErrDependency
 	}
-	if input == nil || output == nil || inputBytes <= 0 || inputBytes > MaxObjectBytes*MaxObjects {
+	if (input == nil && len(expected) == 0) || output == nil || inputBytes <= 0 || inputBytes > MaxObjectBytes*MaxObjects {
 		return ErrAssembly
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
@@ -84,10 +97,13 @@ func assemble(ctx context.Context, input io.Reader, inputBytes int64, output *os
 	if _, err = output.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	command := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-max_alloc", "67108864", "-threads", "1", "-protocol_whitelist", "pipe", "-f", "mpegts", "-i", "pipe:0", "-map", "0:v?", "-map", "0:a?", "-map_metadata", "-1", "-map_chapters", "-1", "-c", "copy", "-bsf:a", "aac_adtstoasc", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "pipe:1")
+	command := exec.CommandContext(ctx, ffmpeg, args...)
 	command.Stdin = input
-	writer := cappedWriter{writer: output, remaining: inputBytes*2 + (16 << 20), cancel: cancel}
+	writer := cappedWriter{writer: output, remaining: inputBytes*2 + (16 << 20), cancel: cancel, ctx: ctx}
 	command.Stdout = &writer
+	if stagedOutput != "" {
+		command.Stdout = io.Discard
+	}
 	command.Stderr = io.Discard
 	command.WaitDelay = 2 * time.Second
 	if err = command.Run(); err != nil {
@@ -96,6 +112,22 @@ func assemble(ctx context.Context, input io.Reader, inputBytes int64, output *os
 		}
 		return errors.Join(ErrAssembly, err, ctx.Err())
 	}
+	if stagedOutput != "" {
+		file, e := os.Open(stagedOutput)
+		if e != nil {
+			return e
+		}
+		info, e := file.Stat()
+		if e == nil && info.Size() > writer.remaining {
+			e = ErrLimit
+		}
+		if e == nil {
+			_, e = io.Copy(&writer, file)
+		}
+		if e = errors.Join(e, file.Close()); e != nil {
+			return e
+		}
+	}
 	if err = output.Sync(); err != nil {
 		return err
 	}
@@ -103,21 +135,63 @@ func assemble(ctx context.Context, input io.Reader, inputBytes int64, output *os
 	if _, err = output.ReadAt(magic[:], 4); err != nil || string(magic[:]) != "ftyp" {
 		return ErrAssembly
 	}
+	data, err := probeMP4(ctx, ffprobe, output.Name())
+	if err != nil {
+		return err
+	}
+	return validateTracks(data, expected, duration)
+}
+func probeMP4(ctx context.Context, ffprobe, path string) ([]byte, error) {
 	probeCtx, probeCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer probeCancel()
 	var data bytes.Buffer
 	limited := cappedWriter{writer: &data, remaining: 65536, cancel: probeCancel}
-	probe := exec.CommandContext(probeCtx, ffprobe, "-v", "error", "-max_alloc", "67108864", "-threads", "1", "-protocol_whitelist", "file", "-f", "mov", "-show_entries", "stream=codec_type,codec_name:format=duration,size", "-of", "json", output.Name())
+	probe := exec.CommandContext(probeCtx, ffprobe, "-v", "error", "-max_alloc", "67108864", "-threads", "1", "-protocol_whitelist", "file", "-f", "mov", "-enable_drefs", "0", "-use_absolute_path", "0", "-show_entries", "stream=codec_type,codec_name,duration,start_time:format=duration,size", "-of", "json", path)
 	probe.Stdout = &limited
 	probe.Stderr = io.Discard
 	probe.WaitDelay = 2 * time.Second
-	if err = probe.Run(); err != nil {
+	if err := probe.Run(); err != nil {
 		if limited.exceeded {
-			return ErrLimit
+			return nil, ErrLimit
 		}
-		return errors.Join(ErrAssembly, err, probeCtx.Err())
+		return nil, errors.Join(ErrAssembly, err, probeCtx.Err())
 	}
-	return validateOutput(data.Bytes())
+	return data.Bytes(), nil
+}
+func validateTracks(data []byte, expected []string, duration float64) error {
+	if err := validateOutput(data); err != nil {
+		return err
+	}
+	if len(expected) > 0 {
+		var result struct {
+			Format struct {
+				Duration string `json:"duration"`
+			} `json:"format"`
+			Streams []struct {
+				Type     string `json:"codec_type"`
+				Duration string `json:"duration"`
+				Start    string `json:"start_time"`
+			} `json:"streams"`
+		}
+		if json.Unmarshal(data, &result) != nil || len(result.Streams) != len(expected) {
+			return ErrAssembly
+		}
+		actual, err := strconv.ParseFloat(result.Format.Duration, 64)
+		if err != nil || math.Abs(actual-duration) > 0.000001 {
+			return ErrUnsupported
+		}
+		for i, kind := range expected {
+			if result.Streams[i].Type != kind {
+				return ErrAssembly
+			}
+			streamDuration, e1 := strconv.ParseFloat(result.Streams[i].Duration, 64)
+			start, e2 := strconv.ParseFloat(result.Streams[i].Start, 64)
+			if e1 != nil || e2 != nil || math.IsNaN(streamDuration) || math.IsInf(streamDuration, 0) || math.IsNaN(start) || math.IsInf(start, 0) || math.Abs(start) > 0.000001 || math.Abs(streamDuration-duration) > 0.000001 {
+				return ErrUnsupported
+			}
+		}
+	}
+	return nil
 }
 func validateOutput(data []byte) error {
 	var result struct {
@@ -147,4 +221,93 @@ func validateOutput(data []byte) error {
 		seen[stream.Type] = true
 	}
 	return nil
+}
+
+// TrackInput supplies already-owned, hash-verified initialization and fragments.
+// Seekable private staging files support MOV demuxing on every native platform;
+// no source URL, remote manifest or cache filename reaches the subprocess.
+type TrackInput struct {
+	Reader   io.Reader
+	Bytes    int64
+	Kind     string
+	Duration float64
+}
+
+func AssembleTracks(ctx context.Context, tracks []TrackInput, output *os.File) error {
+	return assembleTracks(ctx, tracks, output, tools{"ffmpeg", "ffprobe"})
+}
+func assembleTracks(ctx context.Context, tracks []TrackInput, output *os.File, binaries tools) (err error) {
+	if output == nil || len(tracks) == 0 || len(tracks) > 2 {
+		return ErrAssembly
+	}
+	if _, e := exec.LookPath(binaries.ffmpeg); e != nil {
+		return ErrDependency
+	}
+	ffprobe, err := exec.LookPath(binaries.ffprobe)
+	if err != nil {
+		return ErrDependency
+	}
+	directory, err := os.MkdirTemp(filepath.Dir(output.Name()), ".idm-mux-*")
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, os.RemoveAll(directory)) }()
+	if err = localfs.Protect(directory, true); err != nil {
+		return err
+	}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-max_alloc", "67108864", "-threads", "1"}
+	var total int64
+	var expected []string
+	seen := map[string]bool{}
+	for i, track := range tracks {
+		if track.Reader == nil || track.Bytes <= 0 || track.Bytes > MaxObjectBytes*MaxObjects || track.Duration <= 0 || track.Duration > 86400 || math.IsNaN(track.Duration) || math.IsInf(track.Duration, 0) || track.Duration != tracks[0].Duration || (track.Kind != "audio" && track.Kind != "video") || seen[track.Kind] {
+			return ErrAssembly
+		}
+		seen[track.Kind] = true
+		path := filepath.Join(directory, strconv.Itoa(i)+".mp4")
+		f, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if e != nil {
+			return e
+		}
+		n, e := io.Copy(f, io.LimitReader(track.Reader, track.Bytes+1))
+		e = errors.Join(e, f.Close())
+		if e != nil {
+			return e
+		}
+		if n != track.Bytes {
+			return ErrAssembly
+		}
+		if e = ctx.Err(); e != nil {
+			return e
+		}
+		data, e := probeMP4(ctx, ffprobe, path)
+		if e != nil {
+			return e
+		}
+		if e = validateTracks(data, []string{track.Kind}, track.Duration); e != nil {
+			return e
+		}
+		args = append(args, "-protocol_whitelist", "file", "-f", "mov", "-enable_drefs", "0", "-use_absolute_path", "0", "-i", path)
+		total += track.Bytes
+		expected = append(expected, track.Kind)
+	}
+	for i, track := range tracks {
+		selector := "v:0"
+		if track.Kind == "audio" {
+			selector = "a:0"
+		}
+		args = append(args, "-map", strconv.Itoa(i)+":"+selector)
+	}
+	// Older demuxers report a full AAC frame duration for the last packet,
+	// even when the input container ends earlier. Preserve the already-validated
+	// Period end in packet timebase units without changing encoded payloads.
+	if seen["audio"] {
+		end := strconv.FormatFloat(tracks[0].Duration, 'f', -1, 64)
+		args = append(args, "-bsf:a", "setts=duration='min(DURATION,max(0,round("+end+"/TB)-PTS))'")
+	}
+	// A seekable MP4 preserves edit lists and AAC priming. Fragmented pipe
+	// output shifts AAC priming into the presentation and can lengthen video.
+	stagedOutput := filepath.Join(directory, "muxed.mp4")
+	args = append(args, "-map_metadata", "-1", "-map_chapters", "-1", "-c", "copy", "-use_editlist", "1", "-movie_timescale", "1000000", "-fs", strconv.FormatInt(total*2+(16<<20), 10), "-n", "-f", "mp4", stagedOutput)
+	return runAssembly(ctx, nil, total, output, binaries, args, expected, tracks[0].Duration, stagedOutput)
 }

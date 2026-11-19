@@ -8,17 +8,20 @@ api.runtime.onInstalled.addListener(() => {
     contexts: ['link'],
     targetUrlPatterns: ['http://*/*', 'https://*/*'],
   });
-  api.contextMenus.create({
-    id: 'download-hls',
-    title: 'Queue HLS VOD with IDM Enhanced (highest quality)',
-    contexts: ['link'],
-    targetUrlPatterns: ['http://*/*', 'https://*/*'],
-  });
+  for (const kind of ['hls', 'dash'])
+    api.contextMenus.create({
+      id: `download-${kind}`,
+      title: `Queue ${kind.toUpperCase()} VOD with IDM Enhanced (highest quality)`,
+      contexts: ['link'],
+      targetUrlPatterns: ['http://*/*', 'https://*/*'],
+    });
 });
 api.contextMenus.onClicked.addListener((info) => {
   const source = info.linkUrl;
   if (
-    !['download', 'download-hls'].includes(String(info.menuItemId)) ||
+    !['download', 'download-hls', 'download-dash'].includes(
+      String(info.menuItemId),
+    ) ||
     !source
   )
     return;
@@ -27,7 +30,11 @@ api.contextMenus.onClicked.addListener((info) => {
       source,
       '',
       undefined,
-      info.menuItemId === 'download-hls' ? 'hls' : '',
+      info.menuItemId === 'download-dash'
+        ? 'dash'
+        : info.menuItemId === 'download-hls'
+          ? 'hls'
+          : '',
     );
     await saveRequest(request);
     try {

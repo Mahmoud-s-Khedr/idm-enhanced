@@ -27,6 +27,7 @@ func TestCrashWorker(t *testing.T) {
 	}
 	if os.Getenv("IDM_TEST_MEDIA") == "1" {
 		m.assemble = fakeMediaAssembly
+		m.assembleTracks = fakeDASHAssembly
 	}
 	step := os.Getenv("IDM_TEST_STEP")
 	if step != "" {

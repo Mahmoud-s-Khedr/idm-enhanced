@@ -18,6 +18,7 @@ import (
 
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/engine"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/localfs"
+	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/media"
 	"github.com/Mahmoud-s-Khedr/idm-enhanced/internal/storage"
 	"golang.org/x/text/unicode/norm"
 )
@@ -30,18 +31,19 @@ type Options struct {
 	Progress                 func(int64, int64)
 }
 type Manager struct {
-	store         *storage.Store
-	client        *http.Client
-	boundary      func(string) error
-	mu            sync.Mutex
-	active        map[string]context.CancelFunc
-	config        Config
-	queueRunning  bool
-	directory     string
-	assemble      func(context.Context, io.Reader, int64, *os.File) error
-	analysisSlots chan struct{}
-	closed        bool
-	closeErr      error
+	store          *storage.Store
+	client         *http.Client
+	boundary       func(string) error
+	mu             sync.Mutex
+	active         map[string]context.CancelFunc
+	config         Config
+	queueRunning   bool
+	directory      string
+	assembleTracks func(context.Context, []media.TrackInput, *os.File) error
+	assemble       func(context.Context, io.Reader, int64, *os.File) error
+	analysisSlots  chan struct{}
+	closed         bool
+	closeErr       error
 }
 
 func Open(dir string, readonly bool, client *http.Client) (*Manager, error) {
@@ -90,14 +92,14 @@ func (m *Manager) Create(ctx context.Context, o Options) (Job, error) {
 	return m.create(ctx, o, "", "")
 }
 func (m *Manager) create(ctx context.Context, o Options, requestID, fingerprint string) (Job, error) {
-	if o.Kind != "" && o.Kind != "hls" {
+	if o.Kind != "" && o.Kind != "hls" && o.Kind != "dash" {
 		return Job{}, errors.New("unsupported download kind")
 	}
-	if o.Kind == "hls" && (len(o.URL) > 16384 || !strings.EqualFold(filepath.Ext(o.Destination), ".mp4") || o.SHA256 != "" || (o.MediaChoice != "" && len(o.MediaChoice) != 64)) {
-		return Job{}, errors.New("HLS requires a new MP4 destination and a valid selection")
+	if (o.Kind == "hls" || o.Kind == "dash") && (len(o.URL) > 16384 || !strings.EqualFold(filepath.Ext(o.Destination), ".mp4") || o.SHA256 != "" || (o.MediaChoice != "" && len(o.MediaChoice) != 64)) {
+		return Job{}, errors.New("media requires a new MP4 destination and a valid selection")
 	}
 	if o.MediaChoice != "" {
-		if _, e := hex.DecodeString(o.MediaChoice); e != nil || o.Kind != "hls" {
+		if _, e := hex.DecodeString(o.MediaChoice); e != nil || (o.Kind != "hls" && o.Kind != "dash") {
 			return Job{}, errors.New("invalid media choice")
 		}
 	}
@@ -425,7 +427,7 @@ func (m *Manager) runAttempt(ctx context.Context, id string, restart bool, progr
 	if j.State == "needs_attention" || j.Error == "discarded" {
 		return engine.ErrUnsafeResume
 	}
-	if j.Kind == "hls" {
+	if j.Kind == "hls" || j.Kind == "dash" {
 		return m.runMedia(ctx, &j)
 	}
 	if err := m.transition(ctx, &j, "inspecting"); err != nil {
@@ -665,7 +667,7 @@ func (m *Manager) discard(j *Job) error {
 	return localfs.SyncDir(filepath.Dir(j.Partial))
 }
 func (m *Manager) reset(ctx context.Context, j *Job) error {
-	if j.Kind == "hls" {
+	if j.Kind == "hls" || j.Kind == "dash" {
 		if err := m.cleanMedia(j, true); err != nil {
 			return err
 		}
@@ -718,7 +720,7 @@ func (m *Manager) Cancel(ctx context.Context, id string, keep bool) error {
 	if j.State == "completed" {
 		return nil
 	}
-	if !keep && j.Kind == "hls" {
+	if !keep && (j.Kind == "hls" || j.Kind == "dash") {
 		j.Error = "discarded"
 		if err := m.discardMedia(&j); err != nil {
 			return err
@@ -744,7 +746,7 @@ func (m *Manager) Cancel(ctx context.Context, id string, keep bool) error {
 	return m.transition(ctx, &j, "cancelled")
 }
 func Resumable(j Job) bool {
-	if j.Kind == "hls" {
+	if j.Kind == "hls" || j.Kind == "dash" {
 		return j.State != "completed" && j.State != "needs_attention" && j.MediaObjects > 0
 	}
 	return j.State != "completed" && j.State != "needs_attention" && j.Partial != "" && engine.StrongETag(j.ETag)
@@ -768,9 +770,9 @@ func RecoveryHint(j Job) string {
 	case "media_local":
 		return "Media cache ownership or bytes changed. Preserve existing files; Restart abandons unproven cache files and downloads again."
 	case "media_identity":
-		return "The HLS playlist or segment identity changed. Use Restart to discard owned media progress."
+		return "The media manifest or object identity changed. Use Restart to discard owned media progress."
 	case "media_unsupported":
-		return "This source is outside the supported unencrypted MPEG-TS HLS VOD profile or its resource limits. Keep unsupported sources in the browser."
+		return "This source is outside the supported unencrypted HLS/DASH VOD profiles or its resource limits. Keep unsupported sources in the browser."
 	case "media_dependency":
 		return "Install FFmpeg and ffprobe on PATH, then Resume / retry. Complete segments are retained."
 	case "media_assembly":

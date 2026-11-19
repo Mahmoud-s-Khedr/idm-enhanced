@@ -19,7 +19,7 @@ will send builds to beta users later: do not invent human acceptance or mark
 the public R1 checklist complete from automated checks. M7 HLS implementation is
 tracked in `docs/M7_EVIDENCE.md` and `docs/decisions/0007-m7-hls-vod.md`. Preserve
 file checkpoint v1 and distinct media-object semantics; full checks require real
-FFmpeg/ffprobe. M6 protected merge is verified before M7.
+FFmpeg/ffprobe. M6 protected merge is verified before M7. M7 PR #9 is merged; M8 static DASH is tracked in docs/M8_EVIDENCE.md and docs/decisions/0008-m8-dash-vod.md. Preserve file checkpoint v1, HLS media checkpoint v1, DASH media checkpoint v2 and the schema-6 compatibility barrier. The owner authorized M8 protected merge and deferred beta-user testing until afterward.
 
 ## Before changing code
 

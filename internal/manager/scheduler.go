@@ -277,7 +277,7 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 	if (j.State != "completed" && j.State != "cancelled") || (j.State != "completed" && j.Partial != "") {
 		return errors.New("cancel and discard partial data before removing unfinished history")
 	}
-	if j.Kind == "hls" {
+	if j.Kind == "hls" || j.Kind == "dash" {
 		if err := m.discardMedia(&j); err != nil {
 			return err
 		}
